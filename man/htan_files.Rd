@@ -24,7 +24,7 @@ the snapshot (the tables with \code{HTAN_Data_File_ID}, \code{Filename},
 \code{File_Format} and \code{Component} columns) with the participants and
 biospecimens from \code{id_provenance} and the CRDC General Commons DRS URI
 from \code{gc_drs_map}. The result is lazy: filter it with dplyr, then pass it
-to \code{htan_download()}.
+to \code{\link[=htan_download]{htan_download()}}.
 }
 \details{
 Columns:
