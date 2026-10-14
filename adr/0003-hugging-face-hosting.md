@@ -45,7 +45,8 @@ GitHub release of a companion package, and a Hugging Face dataset.
   `hf://datasets/seandavis/htan@r7/<table>.parquet`, which helps Python and
   CLI users and future work that skips the local cache.
 - The dataset card is the natural place for attribution (HTAN, ISB-CGC,
-  CC BY 4.0) and for documenting each release.
+  and HTAN's open-access terms; the card uses `license: other` because no
+  explicit metadata license has been found) and for documenting each release.
 - Parquet stays out of this package's git history and tarball.
 - Publishing a release is a maintainer step (upload, then tag); it is not yet
   scripted in `inst/scripts/build_snapshot`.
