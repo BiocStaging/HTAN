@@ -5,5 +5,5 @@ R/Bioconductor client for the open-access data of the
 
 Status: early development (0.99.x). Not yet on Bioconductor.
 
-See [`adr/0001-parquet-snapshot-duckdb.md`](adr/0001-parquet-snapshot-duckdb.md)
-for the design.
+See [`adr/`](adr/) for the design, starting with ADR-0001
+
