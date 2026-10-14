@@ -15,9 +15,29 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 
 # Introduction
 
-The *HTAN* package is a client for the open-access data of the Human Tumor
-Atlas Network (HTAN), Phase 1. This vignette is a placeholder; a full
-walk-through arrives with the user API.
+The [Human Tumor Atlas Network](https://humantumoratlas.org) (HTAN) is an
+NCI Cancer Moonshot program that built multi-modal atlases of human cancers:
+single-cell and spatial transcriptomics, multiplexed imaging, bulk
+sequencing, and the clinical and biospecimen data that tie them together.
+Phase 1 is complete; its final data release, Release 7, came out in
+November 2025.
+
+*HTAN* is a client for the open-access part of HTAN Phase 1. It does four
+things:
+
+1. **Query** file, biospecimen, clinical and provenance metadata locally,
+   with dplyr, from a parquet snapshot of the ISB-CGC HTAN release tables.
+   No Google account is needed.
+2. **Trace lineage**: from a processed file back to the raw files, the
+   biospecimens and the participant it came from.
+3. **Download** open files: Level 2 imaging anonymously from the CRDC
+   General Commons, and Level 3/4 processed data from Synapse with a free
+   account.
+4. **Read** HTAN file formats into Bioconductor classes
+   (`SingleCellExperiment`, `SpatialExperiment`, `MultiAssayExperiment`).
+
+Controlled-access data (Level 1/2 sequencing, dbGaP phs002371) is out of
+scope.
 
 # Installation
 
@@ -27,11 +47,227 @@ if (!requireNamespace("BiocManager", quietly = TRUE))
 BiocManager::install("seandavi/HTAN")
 ```
 
-```{r load}
+```{r load, message = FALSE}
 library(HTAN)
+library(dplyr)
+```
+
+# Connecting to a snapshot
+
+All metadata comes from one DuckDB connection over a versioned snapshot.
+`htan_con()` reads the snapshot's `manifest.json`, caches and checks each
+parquet file, and creates one SQL view per table. Every other function uses
+that connection.
+
+The snapshot location is set once with an option. The package ships a tiny
+fixture of the r7 snapshot (all 78 tables, restricted to six participants),
+which this vignette uses so it runs offline:
+
+```{r con}
+fixture <- system.file("extdata", "snapshot", package = "HTAN")
+options(HTAN.base_url = fixture)
+con <- htan_con("r7")
+htan_snapshot_info(con)[c("release", "phase", "source", "fixture")]
+```
+
+For real work, point `HTAN.base_url` at the full r7 snapshot (about 20 MB of
+parquet). It is built from ISB-CGC by the maintainer script in
+`inst/scripts/build_snapshot`; a public hosted copy is planned.
+
+```{r full-snapshot, eval = FALSE}
+options(HTAN.base_url = "https://<snapshot host>/htan")  # or a local path
+con <- htan_con("r7")
+```
+
+# Exploring tables
+
+`htan_tables()` lists the snapshot's tables, with the ISB-CGC table each was
+exported from. `htan_tbl()` opens one as a lazy table: dplyr verbs run in
+DuckDB until `collect()`.
+
+```{r tables}
+htan_tables(con)
+htan_tbl("clinical_tier1_demographics", con) |>
+    select(HTAN_Participant_ID, Gender, Race, Ethnicity) |>
+    collect()
+```
+
+Column descriptions come from the BigQuery schema:
+
+```{r columns}
+htan_columns("id_provenance", con) |>
+    select(column, description)
+```
+
+# Finding files
+
+`htan_files()` has one row per HTAN data file, combining all of HTAN's
+file-level tables. It adds the assay and level, the file extension, the
+participants and biospecimens the file was derived from, the General Commons
+DRS ID, and an `access` tier that says how the file can be fetched.
+
+```{r files}
+files <- htan_files(con = con)
+files |>
+    count(assay, level, access) |>
+    arrange(assay, level) |>
+    collect()
+```
+
+Filters can be given directly. Here are the processed (Level 4) single-cell
+files, and everything derived from one participant:
+
+```{r files-filter}
+htan_files(assay == "ScRNA-seq", level == 4, con = con) |>
+    select(HTAN_Data_File_ID, extension, File_Size, HTAN_Participant_ID) |>
+    collect()
+
+htan_files(participants = "HTA7_1005", con = con) |>
+    select(HTAN_Data_File_ID, Component, extension, File_Size, access) |>
+    collect()
+```
+
+A few percent of files (for example, merged single-cell objects) come from
+several participants. Their `HTAN_Participant_ID` is comma-separated, which is
+why the `participants` argument is the reliable way to filter by participant.
+
+# Tracing lineage
+
+`htan_lineage()` follows `id_provenance` from a file to the files it was
+derived from (negative depth) or to its descendants (positive depth).
+
+```{r lineage}
+l4 <- htan_files(assay == "ScRNA-seq", level == 4,
+    participants = "HTA12_251", con = con) |>
+    head(1)
+htan_lineage(l4, con = con) |>
+    select(related_file_id, depth, Component, HTAN_Assayed_Biospecimen_ID) |>
+    arrange(depth) |>
+    collect()
+```
+
+# Downloading files
+
+`htan_download()` routes each file by its `access` tier:
+
+* `open-gc`: open Level 2 imaging, fetched anonymously from the CRDC
+  General Commons with GA4GH DRS;
+* `open-synapse`: Level 3/4 processed data, fetched from Synapse with a
+  personal access token;
+* `controlled`: refused, with a pointer to dbGaP.
+
+Files are checked against their md5. A size guard (`max_bytes`, 20 GB by
+default) stops accidental downloads of very large images; the Orion image
+above is 55 GB.
+
+An open imaging file needs no account. This 250 KB imaging mass cytometry
+image downloads anonymously (the chunk tolerates being offline):
+
+```{r download-gc}
+tiff <- htan_files(drs_uri == "dg.4DFC/6231a7d4-7e68-11ee-b51d-e7db3b9207b8",
+    con = con)
+dl <- tryCatch(
+    htan_download(tiff, dest = tempfile("htan-"), con = con),
+    error = function(e) {
+        message("Download skipped: ", conditionMessage(e))
+        NULL
+    }
+)
+dl
+```
+
+Processed files are on Synapse. Create a free account at
+<https://www.synapse.org>, make a personal access token (Account Settings >
+Personal Access Tokens), and put it in `SYNAPSE_AUTH_TOKEN`, for example in
+`~/.Renviron`:
+
+```{r download-synapse, eval = FALSE}
+Sys.setenv(SYNAPSE_AUTH_TOKEN = "<your token>")
+h5ad <- htan_files(assay == "ScRNA-seq", level == 4, extension == ".h5ad",
+    participants = "HTA5_1470", con = con)
+dl <- htan_download(h5ad, dest = "htan-data", con = con)
+sce <- read_htan(dl)
+```
+
+# Reading files
+
+`read_htan()` dispatches on the file extension:
+
+| file | returns |
+|---|---|
+| `.h5ad` | `SingleCellExperiment` (via anndataR), or `SpatialExperiment` with a spatial embedding |
+| `.rds`, `.RData` | the object; Seurat objects become `SingleCellExperiment` |
+| 10x `.h5` | `SingleCellExperiment` (via TENxIO) |
+| Space Ranger `outs/` | `SpatialExperiment` (via VisiumIO) |
+| imaging Level 4 `.csv` cell table | `SpatialExperiment` |
+| `.tif`, `.ome.tiff`, `.svs` | the path (use RBioFormats or cytomapper) |
+
+The downloaded image is returned as a path:
+
+```{r read-image}
+if (!is.null(dl)) read_htan(dl)
+```
+
+Imaging Level 4 files are cell-by-feature tables: one row per segmented
+cell, with marker intensities, centroids and morphology. Here is a small
+synthetic table in the MCMICRO layout used by several HTAN centers:
+
+```{r read-cells}
+cells <- data.frame(
+    CellID = 1:5,
+    CD3 = c(8.1, 0.2, 7.5, 0.1, 6.9),
+    CD20 = c(0.3, 9.2, 0.1, 8.8, 0.2),
+    PanCK = c(0.1, 0.2, 0.3, 0.1, 9.9),
+    X_centroid = c(101, 240, 130, 410, 520),
+    Y_centroid = c(88, 95, 300, 310, 120),
+    Area = c(51, 63, 48, 70, 120)
+)
+path <- tempfile(fileext = ".csv")
+write.csv(cells, path, row.names = FALSE)
+spe <- read_htan(path)
+spe
+SpatialExperiment::spatialCoords(spe)
+```
+
+Centroid columns are detected from common names; pass `coords =` when a
+center uses others.
+
+# Assembling a MultiAssayExperiment
+
+`htan_experiment()` combines objects read from HTAN files into a
+`MultiAssayExperiment`. The `sampleMap` links every cell or spot to its
+participant through `id_provenance`, and `colData` holds the participants'
+demographics and diagnosis. Name each object by the file it came from:
+
+```{r experiment}
+orion <- htan_files(participants = "HTA7_1005", level == 4, con = con) |>
+    pull(HTAN_Data_File_ID)
+mae <- htan_experiment(setNames(list(spe), orion), con = con)
+mae
+MultiAssayExperiment::colData(mae)[, c("Gender", "Primary_Diagnosis",
+    "Tissue_or_Organ_of_Origin")]
+```
+
+For a file derived from several participants, pass `participant_col`: the
+`colData` column that holds each cell's participant or biospecimen ID.
+
+# Building the snapshot
+
+Maintainers rebuild the snapshot from ISB-CGC BigQuery with the uv project in
+`inst/scripts/build_snapshot`. It needs Google credentials and a billing
+project, dry-runs first, and stops if the estimate exceeds 5 GB (an r7 build
+bills under 1 GB):
+
+```{sh build, eval = FALSE}
+just snapshot <gcp-project>    # writes snapshot/r7/*.parquet + manifest.json
+just fixture                   # re-cuts inst/extdata/snapshot from it
 ```
 
 # Session information
+
+```{r cleanup, include = FALSE}
+htan_disconnect()
+```
 
 ```{r sessionInfo}
 sessionInfo()

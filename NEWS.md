@@ -18,6 +18,8 @@
   SpatialExperiment); images return their path.
 * `htan_experiment()` assembles a MultiAssayExperiment with participant
   colData from the clinical tables.
+* Vignette: query, files, lineage, anonymous download, reading and
+  MultiAssayExperiment assembly, runnable without credentials.
 * A ~1 MB r7 fixture snapshot ships in `inst/extdata/snapshot`.
 
 * Initial package scaffold: DESCRIPTION, CI (R CMD check on Bioconductor
