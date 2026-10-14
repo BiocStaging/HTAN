@@ -56,8 +56,11 @@ that needs BigQuery for every query fails the "runs anonymously" bar.
   DuckDB scans the parquet directly.
 - Tests and the vignette run against a tiny fixture snapshot committed under
   `tests/testthat/fixtures/`, using the same code path as production.
-- The package republishes ISB-CGC tables. That is fine for open data
-  (CC BY 4.0) but makes us responsible for staleness. Phase 1 is frozen, so
+- The package republishes ISB-CGC tables. HTAN releases these tables as
+  open access, but no explicit license for HTAN metadata has been found (the
+  CC BY 4.0 terms seen so far cover HTAN's open *imaging* in the CRDC and IDC,
+  not these tables); the dataset card asks users to follow HTAN's open-access
+  terms. Republishing also makes us responsible for staleness. Phase 1 is frozen, so
   r7 should not change; the manifest's sha256 values detect it if it does.
 - Someone has to host the snapshot. Until that is settled, users must point
   `HTAN.base_url` at a local build.
