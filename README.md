@@ -1,25 +1,40 @@
 # HTAN
 
-R/Bioconductor client for the open-access data of the
-[Human Tumor Atlas Network](https://humantumoratlas.org) (HTAN), Phase 1
-(Release 7).
+> Human Tumor Atlas Network data in R, as Bioconductor objects, with no
+> Google account.
 
-- **Query** file, clinical, biospecimen and provenance metadata with dplyr,
-  locally, from a parquet snapshot of the ISB-CGC HTAN release tables. No
-  Google account needed.
-- **Trace lineage** through `id_provenance`, from processed files to raw files,
-  biospecimens and participants.
-- **Download** open files: Level 2 imaging anonymously from the CRDC General
-  Commons (GA4GH DRS), Level 3/4 from Synapse with a personal access token.
-- **Read** HTAN formats into `SingleCellExperiment`, `SpatialExperiment` and
-  `MultiAssayExperiment`.
+<!-- badges: start -->
+[![R-CMD-check](https://github.com/seandavi/HTAN/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/seandavi/HTAN/actions/workflows/R-CMD-check.yaml)
+[![pkgdown](https://github.com/seandavi/HTAN/actions/workflows/pkgdown.yaml/badge.svg)](https://seandavi.github.io/HTAN/)
+[![Lifecycle: experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+<!-- badges: end -->
 
-Status: early development (0.99.x), not yet on Bioconductor. Controlled-access
-data (dbGaP phs002371) and HTAN Phase 2 are out of scope for now.
+The [Human Tumor Atlas Network](https://humantumoratlas.org) (HTAN) is an
+NCI Cancer Moonshot consortium building single-cell and spatial atlases of
+how tumors start, grow, spread and resist treatment. Phase 1 has 14
+atlases and more than 220,000 data files (single-cell sequencing,
+multiplexed and electron microscopy imaging, spatial transcriptomics and
+bulk assays), with clinical and biospecimen data linking each file to the
+participants it came from.
+
+This package lets you find those files, trace where each came from,
+download the open ones and read them into `SingleCellExperiment`,
+`SpatialExperiment` and `MultiAssayExperiment` objects. The metadata comes
+from a versioned parquet snapshot that you query locally with dplyr through
+DuckDB. The queryable HTAN metadata tables are otherwise published in Google
+BigQuery, which needs a Google account and a billing project; with this
+package a fresh R session, or a Bioconductor build machine, can query all of
+HTAN Phase 1 anonymously.
 
 ## Install
 
+HTAN is in early development and not yet on Bioconductor. Install it from
+GitHub:
+
 ```r
+if (!requireNamespace("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
 BiocManager::install("seandavi/HTAN")
 ```
 
@@ -29,81 +44,97 @@ BiocManager::install("seandavi/HTAN")
 library(HTAN)
 library(dplyr)
 
-## The r7 snapshot is fetched from Hugging Face on first use (~20 MB),
-## checked against its manifest and cached.
-con <- htan_con("r7")
-
-htan_tables()                                   # 78 r7 tables
-htan_files(assay == "ScRNA-seq", level == 4)    # lazy dbplyr table
-htan_files(participants = "HTA12_251") |> count(Component)
-
-l4 <- htan_files(assay == "ScRNA-seq", level == 4, participants = "HTA12_251")
-htan_lineage(l4) |> collect()                   # back to Level 1 and biospecimens
-
-## Open imaging: anonymous
-htan_files(access == "open-gc", File_Size < 1e6) |>
-    head(1) |>
-    htan_download(dest = "htan-data")
-
-## Processed data: Synapse, with SYNAPSE_AUTH_TOKEN set
-dl <- htan_files(extension == ".h5ad", participants = "HTA5_1470") |>
-    htan_download(dest = "htan-data")
-objs <- read_htan(dl)                           # list of SingleCellExperiments
+con <- htan_con("r7")                  # ~20 MB from Hugging Face, once; then cached
+htan_files() |> count(access)          # 221,688 files by where you can get them
+scrna <- htan_files(assay == "ScRNA-seq", level == 4)
+scrna |> count(HTAN_Center, sort = TRUE)
+htan_lineage(head(scrna, 1)) |> collect()   # back to raw files and biospecimens
+img <- htan_files(access == "open-gc", File_Size < 1e6) |> head(1)
+htan_download(img, dest = tempfile())  # anonymous, no account
 ```
 
-See `vignette("HTAN")` for the full walk-through, including
-`htan_experiment()` for building a `MultiAssayExperiment`.
+Every query returns a lazy table: filter, join and count it with dplyr, and
+nothing is computed until you `collect()` it. `read_htan()` turns downloaded
+files into Bioconductor objects, and `htan_experiment()` assembles several
+into a `MultiAssayExperiment` with participant clinical data as `colData`.
 
-## The snapshot
+## What you can get
 
-The metadata snapshot is a public Hugging Face dataset,
+| Data | Where it lives | What you need |
+|---|---|---|
+| All metadata: files, clinical, biospecimen, provenance (78 tables) | The parquet snapshot | Nothing |
+| Open Level 2 imaging (`access == "open-gc"`, about 24,000 files) | CRDC General Commons, anonymous GA4GH DRS | Nothing |
+| Open Level 3/4 processed data, auxiliary files (`"open-synapse"`, about 155,000) | Synapse | A free Synapse account and a personal access token in `SYNAPSE_AUTH_TOKEN` |
+| Level 1/2 sequencing (`"controlled"`, about 43,000) | dbGaP phs002371 | Out of scope; `htan_download()` refuses these |
+| HTAN Phase 2 | Not yet released through ISB-CGC | Out of scope for now |
+
+## How the snapshot works
+
+The snapshot is the public Hugging Face dataset
 [`seandavis/htan`](https://huggingface.co/datasets/seandavis/htan), one git
-tag per release (`r7`). Browse it there with the dataset viewer and SQL
-console, or read it directly from DuckDB as
-`hf://datasets/seandavis/htan@r7/<table>.parquet`. To use a mirror or a local
-build, set `options(HTAN.base_url = ...)`; the package also ships a tiny r7
-fixture, `system.file("extdata", "snapshot", package = "HTAN")`, for examples
-and tests.
+tag per HTAN release. Tag `r7` holds Release 7, the final Phase 1 release:
+78 parquet files (821,773 rows, 19.8 MB) and a `manifest.json` that records
+each table's source, row count, columns and sha256. `htan_con()` downloads
+the files once, checks every sha256 before caching them with BiocFileCache,
+and opens one DuckDB view per table.
 
-## Design
+The tables are exported from the [ISB-CGC](https://isb-cgc.org) HTAN
+BigQuery release tables, each read from its pinned, versioned copy, by a
+maintainer-only builder in
+[`inst/scripts/build_snapshot`](inst/scripts/build_snapshot). You can also
+browse the dataset on Hugging Face, read it from DuckDB directly
+(`hf://datasets/seandavis/htan@r7/<table>.parquet`), point the package at a
+mirror or local build with `options(HTAN.base_url = ...)`, or use the tiny
+fixture snapshot that ships with the package for examples and tests. The
+design is recorded in [`adr/`](adr/).
 
-One seam: `htan_con()` opens a DuckDB connection over a versioned snapshot
-(`<base_url>/<release>/manifest.json` plus one parquet file per table,
-cached and sha256-checked with BiocFileCache). Everything else talks only to
-that connection. See [`adr/`](adr/):
+## Learn more
 
-- [ADR-0001](adr/0001-parquet-snapshot-duckdb.md): metadata from a parquet
-  snapshot, queried with DuckDB.
-- [ADR-0002](adr/0002-r7-table-selection.md): which ISB-CGC tables make up
-  r7 (all 78 `_current` tables, each pinned to its versioned copy).
-- [ADR-0003](adr/0003-hugging-face-hosting.md): the public snapshot is a
-  Hugging Face dataset, tagged per release.
+- [Introduction to HTAN](https://seandavi.github.io/HTAN/articles/HTAN.html):
+  data levels, access tiers and a quick tour of the package.
+- [The HTAN data model, identifiers and lineage](https://seandavi.github.io/HTAN/articles/data-model.html):
+  the metadata tables, `id_provenance`, and the pitfalls in the r7 metadata.
+- [Exploring the HTAN Phase 1 atlas](https://seandavi.github.io/HTAN/articles/atlas-overview.html):
+  a descriptive tour of the whole release, with figures.
+- [From query to analysis](https://seandavi.github.io/HTAN/articles/analysis-workflow.html):
+  one Visium dataset, from a query to a clustered `SpatialExperiment` in a
+  `MultiAssayExperiment`.
 
-The snapshot is built by a maintainer-only uv project in
-[`inst/scripts/build_snapshot`](inst/scripts/build_snapshot) (`just snapshot`).
-The r7 build is 78 tables, 821,773 rows and 19.8 MB of zstd parquet, and
-bills under 1 GB of BigQuery.
+The articles are also installed as vignettes (`browseVignettes("HTAN")`),
+and the [function reference](https://seandavi.github.io/HTAN/reference/) is
+on the same site.
 
-## What is verified
+## Status
 
-| | status |
-|---|---|
-| Snapshot build from ISB-CGC r7 | run for real, 2026-10-14 |
-| Default snapshot from Hugging Face | verified live: 78 tables, sha256-checked, 221,688 files |
-| Queries, lineage, access tiers | tested on the fixture; spot-checked on the full snapshot |
-| Anonymous DRS download (open imaging) | verified live |
-| Synapse download | mocked only; response shapes checked with curl, not yet run with a real token |
-| Readers | tested on synthetic files and TENxIO/VisiumIO example data; not yet on real HTAN Level 4 files |
+Version 0.99.x, experimental. The snapshot build, the Hugging Face default
+and anonymous DRS downloads have been verified against the live services.
+Synapse downloads are tested with mocked responses but have not yet been run
+with a real token ([#7](https://github.com/seandavi/HTAN/issues/7)), and the
+readers are tested on synthetic and example data, not yet on real HTAN
+Level 4 files ([#8](https://github.com/seandavi/HTAN/issues/8)).
 
-## Development
+## Citation
 
-```sh
-just document   # roxygen2
-just test       # offline testthat suite
-just check      # R CMD check
-just bioccheck  # BiocCheck
-```
+If you use the package, please cite it and the HTAN consortium paper;
+`citation("HTAN")` gives both.
 
-See [`CLAUDE.md`](CLAUDE.md) for architecture notes and conventions.
+> Rozenblatt-Rosen O, Regev A, Oberdoerffer P, *et al.* The Human Tumor
+> Atlas Network: Charting Tumor Transitions across Space and Time at
+> Single-Cell Resolution. *Cell* 2020;181(2):236–249.
+> [doi:10.1016/j.cell.2020.03.053](https://doi.org/10.1016/j.cell.2020.03.053)
 
-Developed with support from NCI grant U24CA289073.
+## Getting help and contributing
+
+Ask usage questions on the [Bioconductor support
+site](https://support.bioconductor.org/) with the tag `htan`, and report bugs
+in the [issue tracker](https://github.com/seandavi/HTAN/issues). Contributions
+are welcome: [CONTRIBUTING.md](CONTRIBUTING.md) covers the development setup,
+the tests and the snapshot builder. Please follow the [code of
+conduct](CODE_OF_CONDUCT.md).
+
+## Acknowledgments
+
+Developed with support from NCI grant U24CA289073. HTAN data are generated
+by the HTAN research centers and coordinated by the [HTAN Data Coordinating
+Center](https://humantumoratlas.org); the metadata tables are published by
+the [ISB Cancer Gateway in the Cloud](https://isb-cgc.org) (ISB-CGC).
