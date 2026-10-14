@@ -6,24 +6,37 @@
 .htan <- new.env(parent = emptyenv())
 .htan$cons <- list()
 
+## Public snapshot (ADR-0003): a Hugging Face dataset with one git tag per
+## release and the parquet files at the repository root.
+.default_base_url <-
+    "https://huggingface.co/datasets/seandavis/htan/resolve/{release}"
+
 #' Connect to an HTAN metadata snapshot
 #'
 #' `htan_con()` opens an in-memory DuckDB connection over a versioned parquet
-#' snapshot of the ISB-CGC HTAN release tables. It reads
-#' `<base_url>/<release>/manifest.json`, fetches each parquet file into a
-#' BiocFileCache (for `http(s)://` snapshots), checks its sha256, and creates
-#' one SQL `VIEW` per table. All other functions in the package take this
-#' connection, so changing where the snapshot lives never changes the API.
+#' snapshot of the ISB-CGC HTAN release tables. It reads the release's
+#' `manifest.json`, fetches each parquet file, checks its sha256 against the
+#' manifest, caches it in a BiocFileCache (for `http(s)://` snapshots), and
+#' creates one SQL `VIEW` per table. All other functions in the package take
+#' this connection, so changing where the snapshot lives never changes the
+#' API.
+#'
+#' By default the snapshot comes from the public Hugging Face dataset
+#' <https://huggingface.co/datasets/seandavis/htan>, one git tag per release
+#' (`r7`). Set `options(HTAN.base_url = ...)` to use a mirror or a local build.
 #'
 #' The connection is cached for the session: calling `htan_con()` again with
 #' the same arguments returns the same connection.
 #'
 #' @param release `character(1)`. The HTAN release, e.g. `"r7"`. Always
 #'     explicit, so results are reproducible.
-#' @param base_url `character(1)`. Root of the snapshot: an `https://` or
-#'     `http://` URL, a local directory, or a `file://` URL. The manifest is
-#'     read from `<base_url>/<release>/manifest.json`. Defaults to
-#'     `getOption("HTAN.base_url")`.
+#' @param base_url `character(1)`. Where the snapshot lives: an `https://` or
+#'     `http://` URL, a local directory, or a `file://` URL. If it contains
+#'     `{release}`, that is replaced by `release` (the Hugging Face layout,
+#'     where the release is a tag); otherwise the release is a subdirectory,
+#'     `<base_url>/<release>/manifest.json` (the layout `just snapshot`
+#'     writes). Defaults to `getOption("HTAN.base_url")`, then the Hugging
+#'     Face dataset.
 #' @param cache `character(1)`. BiocFileCache directory for downloaded
 #'     parquet files. Defaults to `getOption("HTAN.cache")`, then
 #'     `tools::R_user_dir("HTAN", "cache")`.
@@ -42,7 +55,7 @@
 #' @export
 htan_con <- function(
     release = "r7",
-    base_url = getOption("HTAN.base_url"),
+    base_url = getOption("HTAN.base_url", .default_base_url),
     cache = getOption("HTAN.cache", tools::R_user_dir("HTAN", "cache")),
     refresh = FALSE
 ) {
@@ -51,11 +64,8 @@ htan_con <- function(
         rlang::abort(
             c(
                 "No HTAN snapshot location is configured.",
-                i = "Set `options(HTAN.base_url = ...)` or pass `base_url`.",
-                i = paste(
-                    "A local build from inst/scripts/build_snapshot works,",
-                    "e.g. `options(HTAN.base_url = \"~/HTAN/snapshot\")`."
-                )
+                i = "Pass `base_url`, or unset option HTAN.base_url to use",
+                i = sprintf("the default, %s.", .default_base_url)
             ),
             class = c("htan_error_no_base_url", "htan_error")
         )
@@ -68,6 +78,7 @@ htan_con <- function(
     }
     src <- .snapshot_source(base_url, release)
     manifest <- .read_manifest(src, cache)
+    manifest$location <- src$dir
     paths <- .table_paths(src, manifest, cache)
     con <- .open_duckdb(manifest, paths)
     .htan$cons[[key]] <- con
@@ -106,8 +117,9 @@ htan_disconnect <- function(con = NULL) {
 #'
 #' @inheritParams htan_tables
 #'
-#' @return A named `list`: release, phase, build date, source, base URL and
-#'     whether the snapshot is a test fixture.
+#' @return A named `list` of the manifest's scalar fields (release, phase,
+#'     build date, ISB-CGC source, ...), plus `location`, where this
+#'     release was read from.
 #'
 #' @examples
 #' fixture <- system.file("extdata", "snapshot", package = "HTAN")
@@ -121,23 +133,28 @@ htan_snapshot_info <- function(con = htan_con()) {
 
 ## ---- snapshot location ---------------------------------------------------
 
-.snapshot_source <- function(base_url, release) {
-    if (grepl("^https?://", base_url)) {
-        root <- sub("/+$", "", base_url)
-        return(list(remote = TRUE, root = root, dir = paste(root, release,
-            sep = "/"), base_url = base_url))
+## The directory (or URL prefix) holding one release's manifest and parquet.
+.release_location <- function(base_url, release) {
+    if (grepl("{release}", base_url, fixed = TRUE)) {
+        return(sub("/+$", "", gsub("{release}", release, base_url,
+            fixed = TRUE)))
     }
-    local <- sub("^file://", "", base_url)
-    local <- path.expand(local)
-    dir <- file.path(local, release)
+    paste(sub("/+$", "", base_url), release, sep = "/")
+}
+
+.snapshot_source <- function(base_url, release) {
+    loc <- .release_location(base_url, release)
+    if (grepl("^https?://", base_url)) {
+        return(list(remote = TRUE, dir = loc, base_url = base_url))
+    }
+    dir <- path.expand(sub("^file://", "", loc))
     if (!dir.exists(dir)) {
         rlang::abort(
             sprintf("Snapshot directory not found: %s", dir),
             class = c("htan_error_snapshot_missing", "htan_error")
         )
     }
-    list(remote = FALSE, root = local, dir = normalizePath(dir),
-        base_url = base_url)
+    list(remote = FALSE, dir = normalizePath(dir), base_url = base_url)
 }
 
 .read_manifest <- function(src, cache) {
@@ -238,7 +255,8 @@ htan_snapshot_info <- function(con = htan_con()) {
 }
 
 ## Parquet files are cached by content hash, so identical tables shared by
-## two releases or mirrors are stored once.
+## two releases or mirrors are stored once. A download is verified against
+## the manifest's sha256 before it enters the cache; a bad file never does.
 .cached_parquet <- function(url, sha256, cache) {
     bfc <- .bfc(cache)
     rname <- paste0("sha256:", sha256)
@@ -250,15 +268,16 @@ htan_snapshot_info <- function(con = htan_con()) {
     if (!is.null(hit)) {
         BiocFileCache::bfcremove(bfc, names(hit))
     }
+    tmp <- tempfile(fileext = ".parquet")
+    on.exit(unlink(tmp), add = TRUE)
+    .perform_to_file(.htan_request(url), tmp)
+    .check_sha256(tmp, sha256, basename(url))
     path <- BiocFileCache::bfcnew(bfc, rname, ext = ".parquet")
-    .perform_to_file(.htan_request(url), path)
-    tryCatch(
-        .check_sha256(path, sha256, basename(url)),
-        error = function(e) {
-            BiocFileCache::bfcremove(bfc, names(path))
-            stop(e)
-        }
-    )
+    if (!file.copy(tmp, path, overwrite = TRUE)) {
+        BiocFileCache::bfcremove(bfc, names(path))
+        rlang::abort(sprintf("Could not write %s to the cache.", path),
+            class = c("htan_error_cache", "htan_error"))
+    }
     path
 }
 

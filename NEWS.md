@@ -1,5 +1,8 @@
 # HTAN 0.99.0
 
+* `htan_con()` defaults to the public Hugging Face snapshot,
+  `seandavis/htan` (one tag per release); `{release}` in `base_url` is
+  replaced by the release. Downloads are sha256-verified before caching.
 * `htan_con()` opens a DuckDB connection over a parquet snapshot (local
   directory, `file://` or `https://`), caching and sha256-checking files with
   BiocFileCache; `htan_disconnect()`, `htan_snapshot_info()`.

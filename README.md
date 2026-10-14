@@ -29,9 +29,9 @@ BiocManager::install("seandavi/HTAN")
 library(HTAN)
 library(dplyr)
 
-## Where the snapshot lives: a local build, or (later) a hosted URL.
-## The package ships a tiny fixture for examples:
-options(HTAN.base_url = system.file("extdata", "snapshot", package = "HTAN"))
+## The r7 snapshot is fetched from Hugging Face on first use (~20 MB),
+## checked against its manifest and cached.
+con <- htan_con("r7")
 
 htan_tables()                                   # 78 r7 tables
 htan_files(assay == "ScRNA-seq", level == 4)    # lazy dbplyr table
@@ -54,6 +54,17 @@ objs <- read_htan(dl)                           # list of SingleCellExperiments
 See `vignette("HTAN")` for the full walk-through, including
 `htan_experiment()` for building a `MultiAssayExperiment`.
 
+## The snapshot
+
+The metadata snapshot is a public Hugging Face dataset,
+[`seandavis/htan`](https://huggingface.co/datasets/seandavis/htan), one git
+tag per release (`r7`). Browse it there with the dataset viewer and SQL
+console, or read it directly from DuckDB as
+`hf://datasets/seandavis/htan@r7/<table>.parquet`. To use a mirror or a local
+build, set `options(HTAN.base_url = ...)`; the package also ships a tiny r7
+fixture, `system.file("extdata", "snapshot", package = "HTAN")`, for examples
+and tests.
+
 ## Design
 
 One seam: `htan_con()` opens a DuckDB connection over a versioned snapshot
@@ -65,6 +76,8 @@ that connection. See [`adr/`](adr/):
   snapshot, queried with DuckDB.
 - [ADR-0002](adr/0002-r7-table-selection.md): which ISB-CGC tables make up
   r7 (all 78 `_current` tables, each pinned to its versioned copy).
+- [ADR-0003](adr/0003-hugging-face-hosting.md): the public snapshot is a
+  Hugging Face dataset, tagged per release.
 
 The snapshot is built by a maintainer-only uv project in
 [`inst/scripts/build_snapshot`](inst/scripts/build_snapshot) (`just snapshot`).
@@ -76,6 +89,7 @@ bills under 1 GB of BigQuery.
 | | status |
 |---|---|
 | Snapshot build from ISB-CGC r7 | run for real, 2026-10-14 |
+| Default snapshot from Hugging Face | verified live: 78 tables, sha256-checked, 221,688 files |
 | Queries, lineage, access tiers | tested on the fixture; spot-checked on the full snapshot |
 | Anonymous DRS download (open imaging) | verified live |
 | Synapse download | mocked only; response shapes checked with curl, not yet run with a real token |

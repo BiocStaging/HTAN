@@ -59,9 +59,19 @@ All metadata comes from one DuckDB connection over a versioned snapshot.
 parquet file, and creates one SQL view per table. Every other function uses
 that connection.
 
-The snapshot location is set once with an option. The package ships a tiny
-fixture of the r7 snapshot (all 78 tables, restricted to six participants),
-which this vignette uses so it runs offline:
+By default `htan_con("r7")` reads the public Hugging Face dataset
+[`seandavis/htan`](https://huggingface.co/datasets/seandavis/htan) (tag
+`r7`, about 20 MB of parquet), checks every file against the manifest's
+sha256, and caches it. The dataset page also has a viewer and a SQL console
+for browsing the same tables without R.
+
+```{r hf-snapshot, eval = FALSE}
+con <- htan_con("r7")   # downloads once, then reads from the cache
+```
+
+The location can be changed with `options(HTAN.base_url = ...)`. The package
+ships a tiny fixture of the r7 snapshot (all 78 tables, restricted to six
+participants), which this vignette uses so it runs offline:
 
 ```{r con}
 fixture <- system.file("extdata", "snapshot", package = "HTAN")
@@ -70,12 +80,11 @@ con <- htan_con("r7")
 htan_snapshot_info(con)[c("release", "phase", "source", "fixture")]
 ```
 
-For real work, point `HTAN.base_url` at the full r7 snapshot (about 20 MB of
-parquet). It is built from ISB-CGC by the maintainer script in
-`inst/scripts/build_snapshot`; a public hosted copy is planned.
+For real work, drop the option (or set it to a mirror or a local build from
+`inst/scripts/build_snapshot`):
 
 ```{r full-snapshot, eval = FALSE}
-options(HTAN.base_url = "https://<snapshot host>/htan")  # or a local path
+options(HTAN.base_url = NULL)   # back to the Hugging Face default
 con <- htan_con("r7")
 ```
 

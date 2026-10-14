@@ -18,7 +18,9 @@ Read `adr/` before changing architecture. ADR-0001 is the core design.
 inst/scripts/build_snapshot/   (maintainer-only, Python/uv)
    ISB-CGC BigQuery r7  ->  snapshot/r7/<table>.parquet + manifest.json
                                      |
-                            base_url (https, dir, file://)
+     uploaded by hand to huggingface.co/datasets/seandavis/htan, tag r7
+                                     |
+          base_url (default: HF resolve/{release}; https, dir, file://)
                                      |
 R/connection.R htan_con()  -> BiocFileCache -> DuckDB, one VIEW per table
                                      |
@@ -81,7 +83,9 @@ a different roxygen2 reformats every Rd file.
 type hints). It bills every BigQuery call to `--project` (default
 `bioc-u24`, the Bioconductor U24 project), dry-runs first and refuses to
 scan more than a byte budget. Output goes to `snapshot/` at the repo root, which is gitignored
-and excluded from the R build. It never uploads anything.
+and excluded from the R build. It never uploads anything: publishing a
+release to the Hugging Face dataset (upload, then tag) is a manual step
+(ADR-0003).
 
 ## Gotchas
 
