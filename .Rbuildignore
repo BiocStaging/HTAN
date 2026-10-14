@@ -6,6 +6,9 @@
 ^CLAUDE\.md$
 ^justfile$
 ^README\.Rmd$
+^_pkgdown\.yml$
+^docs$
+^pkgdown$
 ^snapshot$
 ^inst/scripts/build_snapshot/\.venv$
 ^inst/scripts/build_snapshot/\.ruff_cache$

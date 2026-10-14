@@ -35,6 +35,10 @@ _no-inst-venv:
 snapshot-test:
     cd inst/scripts/build_snapshot && uv run ruff check . && uv run ruff format --check . && uv run mypy src && uv run pytest -q
 
+# Build the pkgdown site into docs/ (deployed by CI on push to devel)
+site:
+    Rscript -e 'pkgdown::build_site(preview = FALSE)'
+
 # Bioconductor-specific checks
 bioccheck:
     Rscript -e 'BiocCheck::BiocCheck(".", `new-package` = TRUE, `no-check-bioc-help` = TRUE)'

@@ -8,6 +8,8 @@ HTAN_*.tar.gz
 vignettes/*.html
 vignettes/*_cache/
 inst/doc
+# pkgdown output; the site is deployed from CI.
+docs/
 # Snapshot output is never committed; only the fixture under tests/ is.
 /snapshot/
 inst/scripts/build_snapshot/.venv/
