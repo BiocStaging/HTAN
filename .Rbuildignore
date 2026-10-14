@@ -15,3 +15,7 @@
 ^\.claude$
 ^.*\.tar\.gz$
 ^HTAN\.Rcheck$
+^inst/scripts/build_snapshot/\.python-version$
+^inst/scripts/build_snapshot/uv\.lock$
+^\.venv-snapshot$
+^inst/scripts/build_snapshot/\.mypy_cache$
