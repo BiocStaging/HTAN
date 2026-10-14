@@ -1,0 +1,26 @@
+# Lint, type-check and unit-test the Python snapshot builder (no BigQuery).
+on:
+  push:
+    branches: [devel]
+    paths: ["inst/scripts/build_snapshot/**", ".github/workflows/snapshot-builder.yaml"]
+  pull_request:
+    paths: ["inst/scripts/build_snapshot/**", ".github/workflows/snapshot-builder.yaml"]
+
+name: snapshot-builder
+
+permissions: read-all
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: inst/scripts/build_snapshot
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy src
+      - run: uv run pytest -q
