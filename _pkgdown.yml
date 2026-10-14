@@ -31,13 +31,13 @@ navbar:
     articles:
       text: Articles
       menu:
-      - text: Getting started
+      - text: Introduction to HTAN
         href: articles/HTAN.html
-      - text: The HTAN data model
+      - text: The HTAN data model, identifiers and lineage
         href: articles/data-model.html
-      - text: Atlas overview
+      - text: Exploring the HTAN Phase 1 atlas
         href: articles/atlas-overview.html
-      - text: An analysis workflow
+      - text: From query to analysis
         href: articles/analysis-workflow.html
       - text: -------
       - text: All articles
