@@ -120,7 +120,7 @@ def snapshot(
 @click.option(
     "--out",
     type=click.Path(path_type=Path),
-    default=Path("tests/testthat/fixtures/snapshot"),
+    default=Path("inst/extdata/snapshot"),
     show_default=True,
 )
 @click.option("--release", default="r7", show_default=True)
