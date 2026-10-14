@@ -18,6 +18,10 @@ document:
 test:
     Rscript -e 'devtools::test()'
 
+# Build the pkgdown site into docs/ (deployed by CI on push to devel)
+site:
+    Rscript -e 'pkgdown::build_site(preview = FALSE)'
+
 # Run integration tests against live services (needs SYNAPSE_AUTH_TOKEN for Synapse)
 test-integration:
     HTAN_INTEGRATION=true Rscript -e 'devtools::test()'
@@ -34,10 +38,6 @@ _no-inst-venv:
 # Lint, type-check and test the snapshot builder
 snapshot-test:
     cd inst/scripts/build_snapshot && uv run ruff check . && uv run ruff format --check . && uv run mypy src && uv run pytest -q
-
-# Build the pkgdown site into docs/ (deployed by CI on push to devel)
-site:
-    Rscript -e 'pkgdown::build_site(preview = FALSE)'
 
 # Bioconductor-specific checks
 bioccheck:
