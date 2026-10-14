@@ -5,7 +5,7 @@
 #' `File_Format` and `Component` columns) with the participants and
 #' biospecimens from `id_provenance` and the CRDC General Commons DRS URI
 #' from `gc_drs_map`. The result is lazy: filter it with dplyr, then pass it
-#' to `htan_download()`.
+#' to [htan_download()].
 #'
 #' Columns:
 #' \describe{
