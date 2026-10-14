@@ -17,14 +17,19 @@ Every `isb-cgc-bq.HTAN.*_current` table labelled `category` = `metadata` or
 Needs Google application-default credentials
 (`gcloud auth application-default login`) and a project to bill.
 
+Run it through the `justfile` at the repository root:
+
 ```sh
-uv run htan-snapshot --project cdsci-infra --dry-run   # estimate only
-uv run htan-snapshot --project cdsci-infra --out ../../../snapshot
-uv run htan-fixture --snapshot ../../../snapshot \
-    --out ../../../tests/testthat/fixtures/snapshot
+just snapshot cdsci-infra --dry-run   # estimate only
+just snapshot cdsci-infra             # writes snapshot/r7/
+just fixture                          # rebuilds tests/testthat/fixtures/snapshot
 ```
 
-or from the repository root, `just snapshot` and `just fixture`.
+The recipes set `UV_PROJECT_ENVIRONMENT` so the virtualenv lives in
+`.venv-snapshot/` at the repository root. Do not let uv create
+`inst/scripts/build_snapshot/.venv`: `R CMD build` installs the package from
+the source tree to build vignettes, and a venv under `inst/` breaks that
+install.
 
 The builder dry-runs every query first and stops if the estimate exceeds
 `--max-gb` (default 5). Output is `<out>/<release>/<table>.parquet` (zstd)
@@ -37,7 +42,5 @@ It writes locally only. Hosting the snapshot is a separate step.
 ## Development
 
 ```sh
-uv run pytest
-uv run ruff check . && uv run ruff format --check .
-uv run mypy src
+just snapshot-test   # ruff, ruff format --check, mypy --strict, pytest
 ```

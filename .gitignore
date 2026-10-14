@@ -17,3 +17,5 @@ __pycache__/
 .env
 .synapseConfig
 .DS_Store
+.venv-snapshot/
+.mypy_cache/
