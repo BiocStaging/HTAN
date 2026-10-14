@@ -78,9 +78,9 @@ a different roxygen2 reformats every Rd file.
 ## Snapshot builder
 
 `inst/scripts/build_snapshot/` is a uv project (polars, google-cloud-bigquery,
-type hints). It bills BigQuery to an explicit project (`--project`,
-maintainers use `cdsci-infra`), dry-runs first and refuses to scan more than a
-byte budget. Output goes to `snapshot/` at the repo root, which is gitignored
+type hints). It bills every BigQuery call to `--project` (default
+`bioc-u24`, the Bioconductor U24 project), dry-runs first and refuses to
+scan more than a byte budget. Output goes to `snapshot/` at the repo root, which is gitignored
 and excluded from the R build. It never uploads anything.
 
 ## Gotchas
