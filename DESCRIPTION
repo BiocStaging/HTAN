@@ -43,16 +43,23 @@ Imports:
 Suggests:
     anndataR,
     BiocIO,
+    bluster,
+    ggplot2,
+    knitr,
+    quarto,
+    scales,
+    scater,
+    scran,
+    scuttle,
     SeuratObject,
     TENxIO,
-    VisiumIO,
+    tidyr,
+    uwot,
     testthat (>= 3.0.0),
-    knitr,
-    rmarkdown,
-    BiocStyle,
+    VisiumIO,
     withr
 biocViews: DataImport, SingleCell, Spatial, ThirdPartyClient
-VignetteBuilder: knitr
+VignetteBuilder: quarto
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 Config/roxygen2/version: 8.1.0
