@@ -13,6 +13,8 @@ from . import manifest as mf
 from .tables import SnapshotTable, select_tables
 
 GB = 1_000_000_000
+# The Bioconductor U24 project pays for HTAN snapshot builds.
+DEFAULT_PROJECT = "bioc-u24"
 
 
 def _sorted(df: pl.DataFrame) -> pl.DataFrame:
@@ -24,7 +26,12 @@ def _sorted(df: pl.DataFrame) -> pl.DataFrame:
 
 
 @click.command()
-@click.option("--project", required=True, help="GCP project billed for queries.")
+@click.option(
+    "--project",
+    default=DEFAULT_PROJECT,
+    show_default=True,
+    help="GCP project billed for every BigQuery call (dry runs and exports).",
+)
 @click.option("--release", default="r7", show_default=True)
 @click.option(
     "--out",
