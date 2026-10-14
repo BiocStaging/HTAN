@@ -1,0 +1,99 @@
+# Live integration tests (skip_if_no_integration()): read the Hugging Face
+# r7 manifest and verify every checksum, and download an open image
+# anonymously through DRS. Non-deterministic, so they never gate a PR. They
+# run weekly to catch upstream drift or outages, and on PRs that edit this
+# workflow. A scheduled failure opens an issue, or comments on the open one.
+# The Synapse test skips unless a SYNAPSE_AUTH_TOKEN secret is configured.
+on:
+  schedule:
+    - cron: '0 6 * * 1'   # Monday 06:00 UTC
+  workflow_dispatch:
+  pull_request:
+    paths: ['.github/workflows/integration.yaml']
+
+name: integration
+
+permissions: read-all
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    container:
+      image: bioconductor/bioconductor_docker:devel
+    env:
+      HTAN_INTEGRATION: "true"
+      SYNAPSE_AUTH_TOKEN: ${{ secrets.SYNAPSE_AUTH_TOKEN }}
+      R_LIBS_USER: /__w/_temp/Library
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Library cache key
+        id: key
+        run: |
+          mkdir -p "$R_LIBS_USER"
+          echo "r=$(Rscript -e 'cat(R.version$major, R.version$minor, as.character(BiocManager::version()), sep = "-")')" >> "$GITHUB_OUTPUT"
+
+      # Shares the cache written by R-CMD-check's bioc-devel leg.
+      - uses: actions/cache@v6
+        with:
+          path: /__w/_temp/Library
+          key: rlib-devel-${{ steps.key.outputs.r }}-${{ hashFiles('DESCRIPTION') }}
+          restore-keys: rlib-devel-${{ steps.key.outputs.r }}-
+
+      - name: Install package and dependencies
+        shell: Rscript {0}
+        run: |
+          options(repos = BiocManager::repositories(), Ncpus = 4L)
+          need <- setdiff(c("remotes", "testthat"),
+              rownames(installed.packages()))
+          if (length(need)) install.packages(need)
+          remotes::install_deps(dependencies = TRUE, upgrade = "never")
+          remotes::install_local(".", dependencies = FALSE, force = TRUE,
+              upgrade = "never")
+
+      - name: Run tests against live services
+        shell: Rscript {0}
+        run: |
+          res <- as.data.frame(testthat::test_dir("tests/testthat",
+              package = "HTAN", load_package = "installed",
+              reporter = "summary", stop_on_failure = FALSE))
+          live <- res[startsWith(res$test, "live:"), ]
+          status <- ifelse(live$failed > 0 | live$error, "failed",
+              ifelse(live$skipped, "skipped", "passed"))
+          cat("## Live integration tests", "",
+              sprintf("- %s: **%s**", live$test, status),
+              file = Sys.getenv("GITHUB_STEP_SUMMARY"), sep = "\n",
+              append = TRUE)
+          if (any(res$failed > 0 | res$error)) quit(status = 1L)
+
+  report:
+    needs: integration
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Open or update the integration-failure issue
+        run: |
+          title="Weekly integration tests are failing"
+          body="The scheduled live integration run failed on $(date -u +%Y-%m-%d): $RUN_URL"
+          num=$(gh issue list --state open --label integration \
+              --search "in:title \"$title\"" --json number --jq '.[0].number')
+          if [ -n "$num" ]; then
+            gh issue comment "$num" --body "$body"
+          else
+            gh issue create --title "$title" --label integration \
+                --body "$body
+
+          These tests hit the Hugging Face snapshot and the CRDC General Commons
+          DRS service, so a failure may be upstream. Close this issue once a
+          run passes again."
+          fi

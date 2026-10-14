@@ -1,0 +1,66 @@
+url: https://seandavi.github.io/HTAN/
+
+template:
+  bootstrap: 5
+  light-switch: true
+  includes:
+    # Google Analytics 4 (one property for all of Sean Davis's web projects).
+    in_header: |
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-KLLV1GCF4E"></script>
+      <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+        gtag('config', 'G-KLLV1GCF4E');
+      </script>
+
+development:
+  mode: auto
+
+home:
+  title: "HTAN: Human Tumor Atlas Network data in R/Bioconductor"
+
+navbar:
+  structure:
+    left: [intro, reference, articles, news]
+    right: [search, github, lightswitch]
+  components:
+    # Links by href, not an `articles:` index, so the site builds while the
+    # vignettes are being converted to Quarto; the article index page lists
+    # whatever vignettes exist.
+    articles:
+      text: Articles
+      menu:
+      - text: Introduction to HTAN
+        href: articles/HTAN.html
+      - text: The HTAN data model, identifiers and lineage
+        href: articles/data-model.html
+      - text: Exploring the HTAN Phase 1 atlas
+        href: articles/atlas-overview.html
+      - text: From query to analysis
+        href: articles/analysis-workflow.html
+      - text: -------
+      - text: All articles
+        href: articles/index.html
+
+reference:
+- title: Connect to a snapshot
+  desc: Open, inspect and close the DuckDB connection over a release.
+  contents:
+  - htan_con
+  - htan_disconnect
+  - htan_snapshot_info
+- title: Query metadata
+  desc: Lazy dbplyr tables over the snapshot.
+  contents:
+  - htan_tables
+  - htan_files
+  - htan_lineage
+- title: Download and read files
+  contents:
+  - htan_download
+  - read_htan
+  - htan_experiment
+- title: Package
+  contents:
+  - HTAN-package

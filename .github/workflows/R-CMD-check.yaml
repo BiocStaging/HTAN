@@ -1,0 +1,177 @@
+# R CMD check across Bioconductor devel/release and Linux/macOS/Windows,
+# BiocCheck on devel, and test coverage. Docs-only changes skip the checks.
+on:
+  push:
+    branches: [devel]
+  pull_request:
+  workflow_dispatch:
+
+name: R-CMD-check
+
+permissions: read-all
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Detect whether any package-relevant files changed. Docs-only changes
+  # (adr/, README, CONTRIBUTING, issue templates, _pkgdown.yml, ...) skip
+  # the R checks; the all-checks gate still reports success.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          filters: |
+            code:
+              - 'R/**'
+              - 'tests/**'
+              - 'vignettes/**'
+              - 'man/**'
+              - 'inst/**'
+              - 'DESCRIPTION'
+              - 'NAMESPACE'
+              - 'NEWS.md'
+              - '.Rbuildignore'
+              - '.github/workflows/R-CMD-check.yaml'
+
+  # Linux legs run in the Bioconductor container: system libraries are
+  # pre-installed and BiocManager installs container binaries. The R
+  # library is cached per image and DESCRIPTION, so a warm run installs
+  # nothing. Bump the release tag when Bioconductor releases.
+  bioc:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    name: bioc-${{ matrix.bioc }} (linux)
+    strategy:
+      fail-fast: false
+      matrix:
+        bioc: [devel, RELEASE_3_23]
+    container:
+      image: bioconductor/bioconductor_docker:${{ matrix.bioc }}
+    env:
+      R_LIBS_USER: /__w/_temp/Library
+      _R_CHECK_FORCE_SUGGESTS_: "false"
+      R_KEEP_PKG_SOURCE: "yes"
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Library cache key
+        id: key
+        run: |
+          mkdir -p "$R_LIBS_USER"
+          echo "r=$(Rscript -e 'cat(R.version$major, R.version$minor, as.character(BiocManager::version()), sep = "-")')" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v6
+        with:
+          path: /__w/_temp/Library
+          key: rlib-${{ matrix.bioc }}-${{ steps.key.outputs.r }}-${{ hashFiles('DESCRIPTION') }}
+          restore-keys: rlib-${{ matrix.bioc }}-${{ steps.key.outputs.r }}-
+
+      - name: Install dependencies
+        shell: Rscript {0}
+        run: |
+          options(repos = BiocManager::repositories(), Ncpus = 4L)
+          need <- c("remotes", "rcmdcheck", "BiocCheck", "covr")
+          need <- setdiff(need, rownames(installed.packages()))
+          if (length(need)) install.packages(need)
+          remotes::install_deps(dependencies = TRUE, upgrade = "never")
+
+      - uses: r-lib/actions/check-r-package@v2
+        with:
+          upload-snapshots: true
+          args: 'c("--no-manual")'
+          build_args: 'c("--no-manual")'
+          error-on: '"warning"'
+
+      - name: BiocCheck
+        if: matrix.bioc == 'devel'
+        shell: Rscript {0}
+        run: |
+          res <- BiocCheck::BiocCheck(
+              ".", `new-package` = TRUE, `no-check-bioc-help` = TRUE
+          )
+          errs <- res$error
+          if (length(errs)) {
+              print(errs)
+              quit(status = 1L)
+          }
+
+      - name: Test coverage
+        if: matrix.bioc == 'devel'
+        shell: Rscript {0}
+        run: |
+          cov <- covr::package_coverage(quiet = TRUE)
+          print(cov)
+          by_file <- covr::coverage_to_list(cov)$filecoverage
+          lines <- c(
+              sprintf("## Test coverage: %.1f%%", covr::percent_coverage(cov)),
+              "", "| file | coverage |", "|---|---:|",
+              sprintf("| `%s` | %.1f%% |", names(by_file), by_file)
+          )
+          cat(lines, file = Sys.getenv("GITHUB_STEP_SUMMARY"),
+              sep = "\n", append = TRUE)
+
+  # macOS and Windows on current R, which pak pairs with Bioconductor
+  # release; CRAN and Bioconductor binaries, cached by setup-r-dependencies.
+  # Windows is continue-on-error: it runs and keeps logs but never blocks.
+  cross-platform:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.os }} (R release)
+    continue-on-error: ${{ matrix.os == 'windows-latest' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      _R_CHECK_FORCE_SUGGESTS_: "false"
+      R_KEEP_PKG_SOURCE: "yes"
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: r-lib/actions/setup-pandoc@v2
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: release
+          use-public-rspm: true
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::rcmdcheck
+          needs: check
+
+      - uses: r-lib/actions/check-r-package@v2
+        with:
+          upload-snapshots: true
+          args: 'c("--no-manual")'
+          build_args: 'c("--no-manual")'
+          error-on: '"warning"'
+
+  # The single required status check. Docs-only PRs (checks skipped) pass;
+  # code PRs gate on both Linux legs and macOS.
+  all-checks:
+    if: always()
+    needs: [changes, bioc, cross-platform]
+    runs-on: ubuntu-latest
+    name: all-checks
+    steps:
+      - name: Required checks passed
+        run: |
+          for r in "${{ needs.changes.result }}" "${{ needs.bioc.result }}" \
+              "${{ needs.cross-platform.result }}"; do
+            if [ "$r" = "failure" ] || [ "$r" = "cancelled" ]; then
+              echo "::error::a required check did not pass"
+              exit 1
+            fi
+          done
+          echo "OK"
