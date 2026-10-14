@@ -45,4 +45,4 @@ snapshot project="bioc-u24" *args="":
 
 # Rebuild the tiny test fixture from a local snapshot
 fixture:
-    cd inst/scripts/build_snapshot && uv run htan-fixture --snapshot ../../../snapshot --out ../../../tests/testthat/fixtures/snapshot
+    cd inst/scripts/build_snapshot && uv run htan-fixture --snapshot ../../../snapshot --out ../../../inst/extdata/snapshot

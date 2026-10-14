@@ -20,7 +20,7 @@ inst/scripts/build_snapshot/   (maintainer-only, Python/uv)
                                      |
                             base_url (https, dir, file://)
                                      |
-R/con.R        htan_con()  -> BiocFileCache -> DuckDB, one VIEW per table
+R/connection.R htan_con()  -> BiocFileCache -> DuckDB, one VIEW per table
                                      |
                everything else talks only to this connection:
 R/tables.R     htan_tables(), htan_tbl()
@@ -33,8 +33,9 @@ R/experiment.R htan_experiment()       (MultiAssayExperiment)
 
 Rules that keep the seam clean:
 
-- Only `R/con.R` knows about manifests, caching and parquet. Other files take
-  a `con` argument defaulting to `htan_con()` and use `DBI`/`dbplyr` on it.
+- Only `R/connection.R` knows about manifests, caching and parquet. Other
+  files take a `con` argument defaulting to `htan_con()` and use
+  `DBI`/`dbplyr` on it.
 - Return lazy dbplyr tables from query functions; collect only when the
   function must (download, read, experiment assembly).
 - Always pin a release (`"r7"`). Never read `_current` semantics into code.
@@ -62,11 +63,14 @@ a different roxygen2 reformats every Rd file.
 
 ## Tests
 
-- The suite is **offline**. `tests/testthat/fixtures/snapshot/r7/` is a tiny
-  real-shaped snapshot (a few rows per table, built from the real r7 export
-  by `inst/scripts/build_snapshot/make_fixture.py`). Tests point
-  `HTAN.base_url` at it via `local_fixture_snapshot()` in
-  `tests/testthat/helper-fixture.R`.
+- The suite is **offline**. `inst/extdata/snapshot/r7/` is a tiny
+  real-shaped snapshot (all 78 tables, six seed participants and their
+  lineage closure, about 1 MB), cut from the real r7 export by
+  `just fixture` (`htan_snapshot/fixture.py`). It lives in `inst/extdata` so
+  examples and the vignette can use it too. Tests point `HTAN.base_url` at it
+  with `local_fixture_snapshot()` in `tests/testthat/helper-fixture.R`.
+- Remote snapshots are tested by serving the fixture through
+  `httr2::with_mocked_responses()` (`mock_snapshot_host()` in `test-con.R`).
 - Synapse and DRS are mocked with `httr2::with_mocked_responses()`.
 - Live tests are gated behind `HTAN_INTEGRATION=true`
   (`skip_if_no_integration()`), and need `SYNAPSE_AUTH_TOKEN` for Synapse.
@@ -78,6 +82,15 @@ type hints). It bills every BigQuery call to `--project` (default
 `bioc-u24`, the Bioconductor U24 project), dry-runs first and refuses to
 scan more than a byte budget. Output goes to `snapshot/` at the repo root, which is gitignored
 and excluded from the R build. It never uploads anything.
+
+## Gotchas
+
+- `BiocFileCache::bfcquery()` returns `rpath` relative to the cache; use
+  `bfcrpath()` (wrapped in `.bfc_hit()`).
+- httr2 mocked responses ignore `req_perform(path =)`; write downloads with
+  `.perform_to_file()`, which handles both.
+- DuckDB 1.5.5 recursive CTEs: an inlined helper CTE can truncate the walk.
+  `htan_lineage()` marks `edges` as `MATERIALIZED`; keep it.
 
 ## Conventions
 
