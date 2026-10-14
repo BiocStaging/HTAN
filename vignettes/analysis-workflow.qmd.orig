@@ -55,10 +55,8 @@ the introduction).
 ```{r packages}
 #| warning: false
 library(SpatialExperiment)
-library(scuttle)
-library(scran)
 library(scater)
-library(bluster)
+library(scrapper)
 library(HTAN)
 library(dplyr)
 library(ggplot2)
@@ -329,8 +327,13 @@ The steps follow the standard Bioconductor workflow for spot-based
 spatial transcriptomics, as in the book *Orchestrating Spatial Transcriptomics
 Analysis with Bioconductor* ([OSTA](https://bioconductor.org/books/release/OSTA/))
 and its single-cell counterpart
-([OSCA](https://bioconductor.org/books/release/OSCA/)), with choices
-explained as they come.
+([scrapbook](https://bioconductor.org/books/release/scrapbook/)), with
+choices explained as they come. Like both books, it computes with
+[scrapper](https://bioconductor.org/packages/scrapper/), which implements
+the methods of scran and scuttle in C++ libraries (libscran) shared with
+the Python and JavaScript ports, and plots with scater. Each scrapper
+function ending in `.se` takes a `SummarizedExperiment` (here the
+`SpatialExperiment`) and returns it with its results added.
 
 ## Quality control
 
@@ -342,10 +345,10 @@ damaged tissue.
 #| eval: !expr have_token
 is_mito <- grepl("^MT-", rownames(spe), ignore.case = TRUE)
 sum(is_mito)
-spe <- addPerCellQCMetrics(spe, subsets = list(mito = is_mito))
+spe <- quickRnaQc.se(spe, subsets = list(mito = is_mito))
 summary(spe$sum)
 summary(spe$detected)
-summary(spe$subsets_mito_percent)
+summary(spe$subset.proportion.mito)
 ```
 
 Plotting the metrics on the tissue (image row coordinates increase
@@ -376,15 +379,22 @@ spot_plot(spe, log10(spe$sum + 1), "log10\ncounts") +
 
 Spots are flagged as outliers by median absolute deviations (MADs) from
 the median, instead of fixed thresholds, because sensible thresholds depend
-on the tissue, the probe panel and sequencing depth. Library size and
-detected genes are tested on the low side only; mitochondrial share on the
-high side.
+on the tissue, the probe panel and sequencing depth. `quickRnaQc.se()`
+has already done this: it set each threshold three MADs from the median,
+testing library size and detected genes on the low side only and the
+mitochondrial share on the high side, and stored the verdict in `keep`.
+The thresholds are kept in the object's metadata:
 
 ```{r qc-filter}
 #| eval: !expr have_token
-discard <- perCellQCFilters(spe, sub.fields = "subsets_mito_percent")
-colSums(as.matrix(discard))
-spe <- spe[, !discard$discard]
+thresholds <- metadata(spe)$qc$thresholds
+unlist(thresholds)
+c(low_sum = sum(spe$sum < thresholds$sum),
+    low_detected = sum(spe$detected < thresholds$detected),
+    high_mito = sum(spe$subset.proportion.mito >
+        thresholds$subset.proportion[["mito"]]),
+    discard = sum(!spe$keep))
+spe <- spe[, spe$keep]
 dim(spe)
 ```
 
@@ -400,32 +410,37 @@ normalisation followed by a log transform is the usual choice for Visium.
 The pooling-based size factors common in single-cell work assume most
 genes are not differentially expressed between pools of cells, which is
 less safe for spots that mix several cells of different types.
+`normalizeRnaCounts.se()` uses the library sizes as size factors by
+default, scaled to average 1, and adds the `logcounts` assay.
 
 ```{r normalise}
 #| eval: !expr have_token
-spe <- computeLibraryFactors(spe)
-spe <- logNormCounts(spe)
+spe <- normalizeRnaCounts.se(spe)
+summary(spe$sizeFactor)
 ```
 
 ## Feature selection and dimensionality reduction
 
 Highly variable genes carry the structure; the rest add noise. The variance
 of each gene's log-expression is modelled against its mean, and the 2,000
-genes with the largest biological component are kept. Mitochondrial genes
-are excluded so that tissue damage does not drive the clustering.
+genes with the largest residual above that trend are marked in
+`rowData(spe)$hvg`. Mitochondrial genes are then removed from the set so
+that tissue damage does not drive the clustering.
 
 ```{r hvgs}
 #| eval: !expr have_token
-dec <- modelGeneVar(spe[!is_mito, ])
-hvgs <- getTopHVGs(dec, n = 2000)
-head(hvgs, 20)
+spe <- chooseRnaHvgs.se(spe, top = 2000)
+rowData(spe)$hvg <- rowData(spe)$hvg & !is_mito
+sum(rowData(spe)$hvg)
+hvg_stats <- rowData(spe)[rowData(spe)$hvg, ]
+head(rownames(hvg_stats)[order(hvg_stats$residuals, decreasing = TRUE)], 20)
 ```
 
 ```{r pca}
 #| eval: !expr have_token
-set.seed(1)
-spe <- runPCA(spe, subset_row = hvgs, ncomponents = 30)
-percent_var <- attr(reducedDim(spe, "PCA"), "percentVar")
+spe <- runPca.se(spe, features = rowData(spe)$hvg, number = 30)
+pca <- metadata(spe)$PCA
+percent_var <- 100 * pca$variance.explained / pca$total.variance
 round(head(percent_var, 10), 1)
 ```
 
@@ -435,7 +450,8 @@ default that is generous for a tissue with a handful of domains.
 ## Clustering
 
 Spots are clustered on the principal components with a shared
-nearest-neighbour graph and the Louvain algorithm, as for single cells.
+nearest-neighbour graph (Jaccard-weighted) and the Leiden algorithm at
+resolution 0.5, the settings OSTA uses for its colorectal Visium workflow.
 This uses expression alone; the spatial plot afterwards is then a test:
 if clusters computed without coordinates form coherent regions, they
 reflect real tissue structure. Spatially aware methods (for example
@@ -444,9 +460,9 @@ domains, at the cost of that independent check.
 
 ```{r cluster}
 #| eval: !expr have_token
-set.seed(1)
-spe$cluster <- clusterCells(spe, use.dimred = "PCA",
-    BLUSPARAM = NNGraphParam(k = 20, cluster.fun = "louvain"))
+spe <- clusterGraph.se(spe, method = "leiden", resolution = 0.5,
+    more.build.args = list(weight.scheme = "jaccard"),
+    output.name = "cluster")
 table(spe$cluster)
 ```
 
@@ -462,25 +478,37 @@ spot_plot(spe, spe$cluster, "Cluster") +
 #| eval: !expr have_token
 #| fig-height: 4
 #| fig-cap: "UMAP of spots, coloured by cluster."
-set.seed(1)
-spe <- runUMAP(spe, dimred = "PCA")
+spe <- runUmap.se(spe)
 plotReducedDim(spe, "UMAP", colour_by = "cluster")
 ```
 
 ## What the clusters are
 
-Marker genes for each cluster, from pairwise comparisons against the
-others, say what each cluster is:
+Marker genes say what each cluster is. `scoreMarkers.se()` compares each
+cluster with every other one and summarises the pairwise effect sizes for
+each gene: Cohen's d (the difference in mean log-expression in standard
+deviations), the AUC (the probability that a spot in the cluster has
+higher expression than a spot in the other), and the differences in mean
+expression and in the proportion of spots where the gene is detected.
+Genes are ranked by Cohen's d averaged over the comparisons. Effect sizes
+are a better summary than p-values here: the clusters were defined from
+these same expression values, so a test for differences between them is
+circular and its p-values would not mean what they usually do.
 
 ```{r markers}
 #| eval: !expr have_token
-markers <- findMarkers(spe, groups = spe$cluster, test.type = "t",
-    direction = "up", pval.type = "some")
+markers <- scoreMarkers.se(spe, groups = spe$cluster)
 top_markers <- vapply(markers, function(m) {
     paste(head(rownames(m), 8), collapse = ", ")
 }, "")
 tibble::tibble(cluster = names(top_markers), top_markers = top_markers)
+previewMarkers(markers[[1]], rows = 8, columns = c("mean", "detected",
+    d = "cohens.d.mean", auc = "auc.mean"))
 ```
+
+The last table is the top of cluster 1's ranking: mean log-expression
+and detected proportion in the cluster, then the mean Cohen's d and AUC
+against the other clusters.
 
 Known markers of the colonic mucosa make the interpretation concrete:
 `EPCAM` and `CEACAM5` for epithelium, `MUC2` for goblet cells, `LGR5` and
@@ -534,7 +562,7 @@ the H&E image (an auxiliary file in the lineage) for reference.
 - **More sections.** Other Vanderbilt Visium files cover more polyps
   (`visium` above). Read several, give each its file ID, and combine them
   in one `MultiAssayExperiment`; integrate them with batch correction
-  (for example `batchelor::fastMNN`) before joint clustering.
+  (for example scrapper's `correctMnn.se()`) before joint clustering.
 - **Single-cell reference.** The participant also has single-cell
   RNA-seq (Level 3 count matrices for the polyp and for normal colon, and
   Vanderbilt's merged Level 4 objects). Cell types from those can be used
@@ -553,7 +581,9 @@ the H&E image (an auxiliary file in the lineage) for reference.
 # Notes on reproducibility
 
 The metadata release is pinned (`htan_con("r7")`), the file is identified
-by its HTAN ID and checked against its md5, and random steps are seeded.
+by its HTAN ID and checked against its md5, and the random steps (PCA,
+clustering, UMAP) use scrapper's fixed default seeds, so they give the
+same result on every run without `set.seed()`.
 The software versions are below. What is not pinned is the file's content
 on Synapse: if the center replaced it, the md5 check would fail rather than
 silently give a different result.

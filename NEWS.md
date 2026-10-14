@@ -27,6 +27,10 @@
   "Exploring the HTAN Phase 1 atlas" and "From query to analysis". They
   replace `HTAN.Rmd`. The analysis vignette's Synapse steps are filled in
   when it is precomputed with `SYNAPSE_AUTH_TOKEN`.
+* The "From query to analysis" vignette runs its analysis with scrapper
+  (QC, normalisation, HVGs, PCA, Leiden clustering, UMAP, marker effect
+  sizes), as OSTA and scrapbook do, in place of scran, scuttle and
+  bluster, which leave Suggests along with uwot.
 * A ~1 MB r7 fixture snapshot ships in `inst/extdata/snapshot`.
 
 * Initial package scaffold: DESCRIPTION, CI (R CMD check on Bioconductor
