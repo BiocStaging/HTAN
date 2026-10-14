@@ -1,0 +1,19 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+*.Rproj
+HTAN.Rcheck/
+HTAN_*.tar.gz
+vignettes/*.html
+vignettes/*_cache/
+inst/doc
+# Snapshot output is never committed; only the fixture under tests/ is.
+/snapshot/
+inst/scripts/build_snapshot/.venv/
+__pycache__/
+.ruff_cache/
+.pytest_cache/
+.env
+.synapseConfig
+.DS_Store

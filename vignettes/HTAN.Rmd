@@ -1,0 +1,38 @@
+---
+title: "HTAN: Human Tumor Atlas Network data in Bioconductor"
+author: "Sean Davis"
+date: "`r Sys.Date()`"
+output: BiocStyle::html_document
+vignette: >
+  %\VignetteIndexEntry{HTAN: Human Tumor Atlas Network data in Bioconductor}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+# Introduction
+
+The *HTAN* package is a client for the open-access data of the Human Tumor
+Atlas Network (HTAN), Phase 1. This vignette is a placeholder; a full
+walk-through arrives with the user API.
+
+# Installation
+
+```{r install, eval = FALSE}
+if (!requireNamespace("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+BiocManager::install("seandavi/HTAN")
+```
+
+```{r load}
+library(HTAN)
+```
+
+# Session information
+
+```{r sessionInfo}
+sessionInfo()
+```

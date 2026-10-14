@@ -1,0 +1,34 @@
+Package: HTAN
+Type: Package
+Title: Query and Retrieve Human Tumor Atlas Network (HTAN) Open-Access Data
+Version: 0.99.0
+Date: 2026-10-14
+Authors@R:
+  c(person(given = "Sean",
+           family = "Davis",
+           role = c("aut", "cre"),
+           email = "seandavi@gmail.com",
+           comment = c(ORCID = "0000-0002-8991-6458")))
+Description: A client for the open-access data of the Human Tumor Atlas
+    Network (HTAN), Phase 1. File, biospecimen, clinical and provenance
+    metadata are queried locally from a versioned parquet snapshot of the
+    ISB-CGC HTAN BigQuery release tables, through DuckDB and dbplyr, with no
+    Google account. Open-access files are downloaded from the CRDC General
+    Commons (anonymous GA4GH DRS) or Synapse (personal access token), and
+    common HTAN file formats are read into Bioconductor classes such as
+    SingleCellExperiment, SpatialExperiment and MultiAssayExperiment.
+License: MIT + file LICENSE
+URL: https://github.com/seandavi/HTAN
+BugReports: https://github.com/seandavi/HTAN/issues
+Depends: R (>= 4.5.0)
+Suggests:
+    testthat (>= 3.0.0),
+    knitr,
+    rmarkdown,
+    BiocStyle
+biocViews: DataImport, SingleCell, Spatial, ThirdPartyClient
+VignetteBuilder: knitr
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+Config/roxygen2/version: 8.1.0
+Config/testthat/edition: 3

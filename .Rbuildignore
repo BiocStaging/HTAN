@@ -1,0 +1,17 @@
+^.*\.Rproj$
+^\.Rproj\.user$
+^\.github$
+^LICENSE\.md$
+^adr$
+^CLAUDE\.md$
+^justfile$
+^README\.Rmd$
+^snapshot$
+^inst/scripts/build_snapshot/\.venv$
+^inst/scripts/build_snapshot/\.ruff_cache$
+^inst/scripts/build_snapshot/\.pytest_cache$
+^inst/scripts/build_snapshot/__pycache__$
+^inst/scripts/build_snapshot/.*/__pycache__$
+^\.claude$
+^.*\.tar\.gz$
+^HTAN\.Rcheck$
