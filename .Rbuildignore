@@ -31,3 +31,4 @@
 ^vignettes/.*\.qmd\.orig$
 ^vignettes/\.quarto$
 ^\.git$
+^\.env$
