@@ -6,7 +6,7 @@
 \usage{
 htan_con(
   release = "r7",
-  base_url = getOption("HTAN.base_url"),
+  base_url = getOption("HTAN.base_url", .default_base_url),
   cache = getOption("HTAN.cache", tools::R_user_dir("HTAN", "cache")),
   refresh = FALSE
 )
@@ -15,10 +15,13 @@ htan_con(
 \item{release}{\code{character(1)}. The HTAN release, e.g. \code{"r7"}. Always
 explicit, so results are reproducible.}
 
-\item{base_url}{\code{character(1)}. Root of the snapshot: an \verb{https://} or
-\verb{http://} URL, a local directory, or a \verb{file://} URL. The manifest is
-read from \verb{<base_url>/<release>/manifest.json}. Defaults to
-\code{getOption("HTAN.base_url")}.}
+\item{base_url}{\code{character(1)}. Where the snapshot lives: an \verb{https://} or
+\verb{http://} URL, a local directory, or a \verb{file://} URL. If it contains
+\code{{release}}, that is replaced by \code{release} (the Hugging Face layout,
+where the release is a tag); otherwise the release is a subdirectory,
+\verb{<base_url>/<release>/manifest.json} (the layout \verb{just snapshot}
+writes). Defaults to \code{getOption("HTAN.base_url")}, then the Hugging
+Face dataset.}
 
 \item{cache}{\code{character(1)}. BiocFileCache directory for downloaded
 parquet files. Defaults to \code{getOption("HTAN.cache")}, then
@@ -31,13 +34,18 @@ A \code{duckdb_connection} (a DBI connection).
 }
 \description{
 \code{htan_con()} opens an in-memory DuckDB connection over a versioned parquet
-snapshot of the ISB-CGC HTAN release tables. It reads
-\verb{<base_url>/<release>/manifest.json}, fetches each parquet file into a
-BiocFileCache (for \verb{http(s)://} snapshots), checks its sha256, and creates
-one SQL \code{VIEW} per table. All other functions in the package take this
-connection, so changing where the snapshot lives never changes the API.
+snapshot of the ISB-CGC HTAN release tables. It reads the release's
+\code{manifest.json}, fetches each parquet file, checks its sha256 against the
+manifest, caches it in a BiocFileCache (for \verb{http(s)://} snapshots), and
+creates one SQL \code{VIEW} per table. All other functions in the package take
+this connection, so changing where the snapshot lives never changes the
+API.
 }
 \details{
+By default the snapshot comes from the public Hugging Face dataset
+\url{https://huggingface.co/datasets/seandavis/htan}, one git tag per release
+(\code{r7}). Set \code{options(HTAN.base_url = ...)} to use a mirror or a local build.
+
 The connection is cached for the session: calling \code{htan_con()} again with
 the same arguments returns the same connection.
 }

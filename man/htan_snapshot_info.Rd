@@ -10,8 +10,9 @@ htan_snapshot_info(con = htan_con())
 \item{con}{A connection from \code{\link[=htan_con]{htan_con()}}.}
 }
 \value{
-A named \code{list}: release, phase, build date, source, base URL and
-whether the snapshot is a test fixture.
+A named \code{list} of the manifest's scalar fields (release, phase,
+build date, ISB-CGC source, ...), plus \code{location}, where this
+release was read from.
 }
 \description{
 Snapshot metadata recorded in a connection
