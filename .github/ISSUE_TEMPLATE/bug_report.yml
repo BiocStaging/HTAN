@@ -1,0 +1,59 @@
+name: Bug report
+description: An error, a wrong result, or a download or reader that fails
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. The most useful things you can give us are a
+        **minimal reproducible example** and the **snapshot you were using**:
+        most HTAN bugs depend on which release and which files are involved.
+  - type: textarea
+    id: reprex
+    attributes:
+      label: Reproducible example
+      description: Minimal R code that shows the problem. A reprex is ideal.
+      render: r
+      placeholder: |
+        library(HTAN)
+        htan_files(assay == "ScRNA-seq", level == 4) |> head()
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: What happened?
+      description: The full error, warning or wrong output, pasted verbatim.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+    validations:
+      required: false
+  - type: input
+    id: ids
+    attributes:
+      label: HTAN identifiers involved
+      description: Any HTAN_Data_File_ID, participant or biospecimen IDs, or a Synapse entity ID.
+      placeholder: e.g. HTA12_251, syn12345678
+    validations:
+      required: false
+  - type: textarea
+    id: snapshot
+    attributes:
+      label: Snapshot info
+      description: Output of `htan_snapshot_info()` (release, source and build date of the metadata you queried).
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: sessioninfo
+    attributes:
+      label: Session info
+      description: Output of `sessionInfo()` (or `sessioninfo::session_info()`).
+      render: text
+    validations:
+      required: true

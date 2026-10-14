@@ -1,0 +1,30 @@
+bibentry(
+    bibtype = "Manual",
+    title = paste("HTAN: Query and Retrieve Human Tumor Atlas Network",
+        "(HTAN) Open-Access Data"),
+    author = person("Sean", "Davis"),
+    year = sub("-.*", "", meta$Date),
+    note = paste("R package version", meta$Version),
+    url = "https://github.com/seandavi/HTAN",
+    header = "To cite the HTAN package in publications use:"
+)
+
+bibentry(
+    bibtype = "Article",
+    title = paste("The Human Tumor Atlas Network: Charting Tumor",
+        "Transitions across Space and Time at Single-Cell Resolution"),
+    author = c(
+        person("Orit", "Rozenblatt-Rosen"),
+        person("Aviv", "Regev"),
+        person("Philipp", "Oberdoerffer"),
+        person("others")
+    ),
+    journal = "Cell",
+    year = "2020",
+    volume = "181",
+    number = "2",
+    pages = "236--249",
+    doi = "10.1016/j.cell.2020.03.053",
+    note = "PMID: 32302568",
+    header = "To cite the Human Tumor Atlas Network, please also cite:"
+)
