@@ -62,12 +62,6 @@ objs <- read_htan(dl)                           # list of SingleCellExperiments
 - `vignette("analysis-workflow")`: one Visium dataset from query to a
   clustered `SpatialExperiment` inside a `MultiAssayExperiment`.
 
-They are precomputed (Bioconductor builders have no network or
-credentials): sources are `vignettes/*.qmd.orig`, and
-`just precompute-vignettes` regenerates the `.qmd` files. The analysis
-vignette's download and analysis steps need `SYNAPSE_AUTH_TOKEN` when
-precomputing.
-
 ## The snapshot
 
 The metadata snapshot is a public Hugging Face dataset,
