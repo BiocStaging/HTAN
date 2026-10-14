@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Bioconductor support site
+    url: https://support.bioconductor.org/tag/htan
+    about: Usage questions ("how do I ...?") are best asked here, tagged `htan`. You reach a wider audience and leave a searchable answer.
+  - name: GitHub Discussions
+    url: https://github.com/seandavi/HTAN/discussions
+    about: Ideas, analysis approaches and show-and-tell.
+  - name: HTAN Data Coordinating Center
+    url: https://humantumoratlas.org
+    about: The HTAN portal, data submission and controlled access (dbGaP phs002371) are run by the HTAN DCC, not this package.

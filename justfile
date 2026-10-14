@@ -18,6 +18,10 @@ document:
 test:
     Rscript -e 'devtools::test()'
 
+# Build the pkgdown site into docs/ (deployed by CI on push to devel)
+site:
+    Rscript -e 'pkgdown::build_site(preview = FALSE)'
+
 # Run integration tests against live services (needs SYNAPSE_AUTH_TOKEN for Synapse)
 test-integration:
     HTAN_INTEGRATION=true Rscript -e 'devtools::test()'

@@ -1,0 +1,32 @@
+name: Feature request
+description: Suggest new functionality, a new file format, or an enhancement
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: The analysis you are trying to do and where the package gets in the way.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What would you like HTAN to do? An example call is helpful.
+      render: r
+    validations:
+      required: false
+  - type: input
+    id: example
+    attributes:
+      label: Example data (if relevant)
+      description: An atlas, assay, file ID or participant that exercises the request.
+    validations:
+      required: false
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: false

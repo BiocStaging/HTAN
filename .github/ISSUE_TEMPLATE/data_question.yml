@@ -1,0 +1,54 @@
+name: Data question
+description: Something about the HTAN data itself looks wrong, missing or unclear
+labels: ["question", "data-model"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form for questions about the **data**: a field you cannot
+        interpret, a file you expected but cannot find, counts that do not
+        match the HTAN portal. For "how do I ...?" usage questions, the
+        [Bioconductor support site](https://support.bioconductor.org/tag/htan)
+        (tag `htan`) usually gets a faster answer.
+
+        Some issues are upstream, in the HTAN release or the ISB-CGC tables,
+        rather than in this package. We will label those `upstream` and point
+        you to the right place.
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question
+      description: What you are trying to find out, and what you see instead.
+    validations:
+      required: true
+  - type: textarea
+    id: code
+    attributes:
+      label: Query you ran
+      description: The R code you used, if any.
+      render: r
+    validations:
+      required: false
+  - type: input
+    id: ids
+    attributes:
+      label: HTAN identifiers
+      description: Atlas, participant, biospecimen or file IDs involved.
+      placeholder: e.g. HTA5_1470, HTAN_Data_File_ID ...
+    validations:
+      required: false
+  - type: input
+    id: tables
+    attributes:
+      label: Tables or columns
+      description: Which snapshot tables or columns (see `htan_tables()` / `htan_columns()`).
+    validations:
+      required: false
+  - type: textarea
+    id: snapshot
+    attributes:
+      label: Snapshot info
+      description: Output of `htan_snapshot_info()`.
+      render: text
+    validations:
+      required: true

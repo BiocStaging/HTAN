@@ -1,0 +1,54 @@
+cff-version: 1.2.0
+message: >-
+  If you use the HTAN package, please cite the software and the Human Tumor
+  Atlas Network.
+type: software
+title: 'HTAN: Query and Retrieve Human Tumor Atlas Network (HTAN) Open-Access Data'
+abstract: >-
+  An R/Bioconductor client for the open-access data of the Human Tumor Atlas
+  Network (HTAN), Phase 1. Metadata are queried locally from a versioned
+  parquet snapshot of the ISB-CGC HTAN release tables through DuckDB, with no
+  Google account; open files are downloaded from the CRDC General Commons or
+  Synapse and read into Bioconductor classes.
+authors:
+  - family-names: Davis
+    given-names: Sean
+    email: seandavi@gmail.com
+    orcid: https://orcid.org/0000-0002-8991-6458
+version: 0.99.0
+date-released: '2026-10-14'
+license: MIT
+url: https://seandavi.github.io/HTAN/
+repository-code: https://github.com/seandavi/HTAN
+keywords:
+  - Bioconductor
+  - R
+  - cancer
+  - tumor atlas
+  - single-cell
+  - spatial transcriptomics
+  - HTAN
+  - DuckDB
+references:
+  - type: article
+    title: >-
+      The Human Tumor Atlas Network: Charting Tumor Transitions across Space
+      and Time at Single-Cell Resolution
+    authors:
+      - family-names: Rozenblatt-Rosen
+        given-names: Orit
+      - family-names: Regev
+        given-names: Aviv
+      - family-names: Oberdoerffer
+        given-names: Philipp
+      - name: Human Tumor Atlas Network
+    journal: Cell
+    year: 2020
+    volume: 181
+    issue: 2
+    start: 236
+    end: 249
+    doi: 10.1016/j.cell.2020.03.053
+    identifiers:
+      - type: other
+        value: 'PMID: 32302568'
