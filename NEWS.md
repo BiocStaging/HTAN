@@ -12,6 +12,12 @@
   the CRDC General Commons (GA4GH DRS), Level 3/4 from Synapse REST with
   `SYNAPSE_AUTH_TOKEN`. It verifies md5, skips verified copies, refuses
   controlled files, and has a total-size guard.
+* `read_htan()` reads `.h5ad` (anndataR), `.rds`/`.RData` (pass-through
+  or Seurat conversion via SeuratObject), 10x `.h5` (TENxIO), Space Ranger
+  `outs/` (VisiumIO) and imaging Level 4 cell tables (to
+  SpatialExperiment); images return their path.
+* `htan_experiment()` assembles a MultiAssayExperiment with participant
+  colData from the clinical tables.
 * A ~1 MB r7 fixture snapshot ships in `inst/extdata/snapshot`.
 
 * Initial package scaffold: DESCRIPTION, CI (R CMD check on Bioconductor
