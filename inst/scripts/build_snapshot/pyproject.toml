@@ -1,0 +1,38 @@
+[project]
+name = "htan-snapshot"
+version = "0.1.0"
+description = "Export ISB-CGC HTAN release tables to a parquet snapshot for the HTAN R package"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "click>=8.1",
+    "google-cloud-bigquery>=3.25",
+    "google-cloud-bigquery-storage>=2.25",
+    "polars>=1.0",
+    "pyarrow>=17",
+]
+
+[project.scripts]
+htan-snapshot = "htan_snapshot.cli:snapshot"
+htan-fixture = "htan_snapshot.cli:fixture"
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.11"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ANN"]
+ignore = ["ANN401"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["ANN"]
+
+[tool.mypy]
+strict = true
+ignore_missing_imports = true
