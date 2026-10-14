@@ -90,17 +90,19 @@ design is recorded in [`adr/`](adr/).
 
 ## Learn more
 
-- [Getting started](https://seandavi.github.io/HTAN/articles/HTAN.html):
-  connect, query, trace lineage, download and read.
-- [The HTAN data model](https://seandavi.github.io/HTAN/articles/data-model.html):
-  atlases, participants, biospecimens, files, assay levels and provenance.
-- [Atlas overview](https://seandavi.github.io/HTAN/articles/atlas-overview.html):
-  what each Phase 1 atlas contains.
-- [An analysis workflow](https://seandavi.github.io/HTAN/articles/analysis-workflow.html):
-  from a query to a Bioconductor analysis.
+- [Introduction to HTAN](https://seandavi.github.io/HTAN/articles/HTAN.html):
+  data levels, access tiers and a quick tour of the package.
+- [The HTAN data model, identifiers and lineage](https://seandavi.github.io/HTAN/articles/data-model.html):
+  the metadata tables, `id_provenance`, and the pitfalls in the r7 metadata.
+- [Exploring the HTAN Phase 1 atlas](https://seandavi.github.io/HTAN/articles/atlas-overview.html):
+  a descriptive tour of the whole release, with figures.
+- [From query to analysis](https://seandavi.github.io/HTAN/articles/analysis-workflow.html):
+  one Visium dataset, from a query to a clustered `SpatialExperiment` in a
+  `MultiAssayExperiment`.
 
-The [function reference](https://seandavi.github.io/HTAN/reference/) is on
-the same site.
+The articles are also installed as vignettes (`browseVignettes("HTAN")`),
+and the [function reference](https://seandavi.github.io/HTAN/reference/) is
+on the same site.
 
 ## Status
 
