@@ -48,6 +48,7 @@ that needs BigQuery for every query fails the "runs anonymously" bar.
 5. **Hosting is not decided here.** The builder writes locally and uploads
    nothing. Where the public snapshot lives (Cloudflare R2, a DCC/ISB bucket,
    or a GitHub release) is a separate decision; the client only needs a URL.
+   (Decided in ADR-0003: a Hugging Face dataset.)
 
 ## Consequences
 
