@@ -40,7 +40,7 @@ bioccheck:
     Rscript -e 'BiocCheck::BiocCheck(".", `new-package` = TRUE, `no-check-bioc-help` = TRUE)'
 
 # Export the ISB-CGC r7 tables to snapshot/r7 (needs gcloud auth; bills --project)
-snapshot project="cdsci-infra" *args="":
+snapshot project="bioc-u24" *args="":
     cd inst/scripts/build_snapshot && uv run htan-snapshot --project {{project}} --out ../../../snapshot {{args}}
 
 # Rebuild the tiny test fixture from a local snapshot

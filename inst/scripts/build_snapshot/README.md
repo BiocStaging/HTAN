@@ -15,13 +15,16 @@ Every `isb-cgc-bq.HTAN.*_current` table labelled `category` = `metadata` or
 ## Usage
 
 Needs Google application-default credentials
-(`gcloud auth application-default login`) and a project to bill.
+(`gcloud auth application-default login`) and a project to bill. Builds are
+billed to the Bioconductor U24 project, `bioc-u24`, which is the default for
+`--project` and for `just snapshot`; pass another project explicitly to
+override it.
 
 Run it through the `justfile` at the repository root:
 
 ```sh
-just snapshot cdsci-infra --dry-run   # estimate only
-just snapshot cdsci-infra             # writes snapshot/r7/
+just snapshot bioc-u24 --dry-run   # estimate only
+just snapshot bioc-u24             # writes snapshot/r7/
 just fixture                          # rebuilds tests/testthat/fixtures/snapshot
 ```
 
