@@ -57,11 +57,24 @@ just document   # roxygen2: regenerate man/ and NAMESPACE (never hand-edit them)
 just test       # testthat, offline
 just check      # R CMD build + R CMD check
 just bioccheck  # BiocCheck
+just precompute-vignettes  # rebuild vignettes/*.qmd (network; Synapse token for analysis-workflow)
 just snapshot   # run the Python snapshot builder (needs gcloud auth)
 ```
 
 Roxygen version is pinned in `DESCRIPTION` (`Config/roxygen2/version`);
 a different roxygen2 reformats every Rd file.
+
+## Vignettes
+
+Precomputed, as in GEOquery. Edit `vignettes/<name>.qmd.orig` (live code),
+then run `just precompute-vignettes [name]`, which knits it to
+`vignettes/<name>.qmd` with output and figures (`vignettes/figures/`).
+Commit all three. Never hand-edit the `.qmd`. The build only renders the
+markdown (`VignetteBuilder: quarto`), with no network. Write numbers in
+prose as inline R, never by hand. `analysis-workflow` gates its Synapse
+chunks on `SYNAPSE_AUTH_TOKEN` (`#| eval: !expr have_token`); without a
+token they are shown without output. Attach Bioconductor packages before
+dplyr, or their `count()`/`desc()`/`slice()` mask dplyr's.
 
 ## Tests
 
@@ -69,7 +82,7 @@ a different roxygen2 reformats every Rd file.
   real-shaped snapshot (all 78 tables, six seed participants and their
   lineage closure, about 1 MB), cut from the real r7 export by
   `just fixture` (`htan_snapshot/fixture.py`). It lives in `inst/extdata` so
-  examples and the vignette can use it too. Tests point `HTAN.base_url` at it
+  examples can use it too. Tests point `HTAN.base_url` at it
   with `local_fixture_snapshot()` in `tests/testthat/helper-fixture.R`.
 - Remote snapshots are tested by serving the fixture through
   `httr2::with_mocked_responses()` (`mock_snapshot_host()` in `test-con.R`).

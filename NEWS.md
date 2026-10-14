@@ -21,8 +21,12 @@
   SpatialExperiment); images return their path.
 * `htan_experiment()` assembles a MultiAssayExperiment with participant
   colData from the clinical tables.
-* Vignette: query, files, lineage, anonymous download, reading and
-  MultiAssayExperiment assembly, runnable without credentials.
+* Four Quarto vignettes, precomputed against the r7 snapshot
+  (`dev/precompute-vignettes.R`, `just precompute-vignettes`):
+  "Introduction to HTAN", "The HTAN data model, identifiers and lineage",
+  "Exploring the HTAN Phase 1 atlas" and "From query to analysis". They
+  replace `HTAN.Rmd`. The analysis vignette's Synapse steps are filled in
+  when it is precomputed with `SYNAPSE_AUTH_TOKEN`.
 * A ~1 MB r7 fixture snapshot ships in `inst/extdata/snapshot`.
 
 * Initial package scaffold: DESCRIPTION, CI (R CMD check on Bioconductor

@@ -51,8 +51,22 @@ dl <- htan_files(extension == ".h5ad", participants = "HTA5_1470") |>
 objs <- read_htan(dl)                           # list of SingleCellExperiments
 ```
 
-See `vignette("HTAN")` for the full walk-through, including
-`htan_experiment()` for building a `MultiAssayExperiment`.
+## Vignettes
+
+- `vignette("HTAN")`: what HTAN is, its data levels, access tiers and
+  storage, what this package covers, and a quick tour.
+- `vignette("data-model")`: identifiers, the metadata tables,
+  `id_provenance` and lineage, and the pitfalls in the r7 metadata.
+- `vignette("atlas-overview")`: a descriptive tour of the whole Phase 1
+  release, with figures.
+- `vignette("analysis-workflow")`: one Visium dataset from query to a
+  clustered `SpatialExperiment` inside a `MultiAssayExperiment`.
+
+They are precomputed (Bioconductor builders have no network or
+credentials): sources are `vignettes/*.qmd.orig`, and
+`just precompute-vignettes` regenerates the `.qmd` files. The analysis
+vignette's download and analysis steps need `SYNAPSE_AUTH_TOKEN` when
+precomputing.
 
 ## The snapshot
 
