@@ -22,3 +22,4 @@
 ^dev$
 ^vignettes/.*\.qmd\.orig$
 ^vignettes/\.quarto$
+^\.git$
