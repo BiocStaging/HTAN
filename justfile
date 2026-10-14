@@ -39,6 +39,10 @@ _no-inst-venv:
 snapshot-test:
     cd inst/scripts/build_snapshot && uv run ruff check . && uv run ruff format --check . && uv run mypy src && uv run pytest -q
 
+# Precompute vignettes/*.qmd from *.qmd.orig (needs network; SYNAPSE_AUTH_TOKEN for analysis-workflow)
+precompute-vignettes *names="":
+    Rscript dev/precompute-vignettes.R {{names}}
+
 # Bioconductor-specific checks
 bioccheck:
     Rscript -e 'BiocCheck::BiocCheck(".", `new-package` = TRUE, `no-check-bioc-help` = TRUE)'

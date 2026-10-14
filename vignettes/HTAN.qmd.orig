@@ -1,0 +1,597 @@
+---
+title: "Introduction to HTAN"
+author: "Sean Davis"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+vignette: >
+  %\VignetteIndexEntry{Introduction to HTAN}
+  %\VignetteEngine{quarto::html}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup}
+#| include: false
+library(HTAN)
+library(dplyr)
+fmt <- function(x) format(x, big.mark = ",", scientific = FALSE)
+```
+
+This vignette introduces the Human Tumor Atlas Network (HTAN) and the
+*HTAN* package. It covers what the program is, how its data are organised and
+where they are stored, and what the package can and cannot do. It ends with a
+short tour of the package. Three companion vignettes go further:
+
+- [The HTAN data model, identifiers and lineage](data-model.html) explains
+  the identifiers, the metadata tables, and how a processed file is traced
+  back to a biospecimen and a participant.
+- [Exploring the HTAN Phase 1 atlas](atlas-overview.html) is a descriptive
+  tour of the whole Phase 1 release: centers, organs, assays, data levels
+  and clinical variables.
+- [From query to analysis](analysis-workflow.html) works through one
+  dataset, from a metadata query to a spatial transcriptomics analysis in
+  Bioconductor.
+
+The output in these vignettes was computed ahead of time from the real HTAN
+Release 7 metadata (see [How these vignettes are built](#how-these-vignettes-are-built)).
+
+# Getting started
+
+Install the package from GitHub with BiocManager:
+
+```{r install}
+#| eval: false
+if (!requireNamespace("BiocManager", quietly = TRUE)) {
+    install.packages("BiocManager")
+}
+BiocManager::install("seandavi/HTAN")
+```
+
+Load it, together with dplyr, which is the query language for everything
+that follows:
+
+```{r load}
+library(HTAN)
+library(dplyr)
+```
+
+Open a connection to the Release 7 metadata snapshot. The first call
+downloads about 20 MB of parquet files from Hugging Face, checks each one
+against its sha256 checksum and caches it; later calls read from the cache.
+No account is needed.
+
+```{r con}
+con <- htan_con("r7")
+```
+
+Find files. `htan_files()` returns one row per HTAN data file, as a lazy
+table that runs in DuckDB until you call `collect()`:
+
+```{r first-query}
+htan_files(assay == "ScRNA-seq", level == 4, con = con) |>
+    count(HTAN_Center, extension) |>
+    arrange(desc(n)) |>
+    collect()
+```
+
+Trace a processed file back to the raw files and biospecimen it came from:
+
+```{r first-lineage}
+htan_files(assay == "ScRNA-seq", level == 4, participants = "HTA12_251",
+    con = con) |>
+    head(1) |>
+    htan_lineage(con = con) |>
+    select(related_file_id, depth, Component, HTAN_Assayed_Biospecimen_ID) |>
+    arrange(depth) |>
+    collect()
+```
+
+Download an open file. Level 2 images in the CRDC General Commons need no
+account; processed Level 3 and 4 files are on Synapse and need a free
+personal access token (see [Downloading files](#downloading-files)). Then
+read the file with `read_htan()`, which returns a Bioconductor object where
+it can.
+
+That is the whole workflow: query, trace, download, read. The rest of this
+vignette explains what you are querying.
+
+# What HTAN is
+
+The Human Tumor Atlas Network is a National Cancer Institute (NCI) Cancer
+Moonshot initiative, launched in September 2018, that builds
+three-dimensional atlases of the cellular, morphological and molecular
+features of human cancers ([HTAN overview](https://humantumoratlas.org/overview)).
+The founding paper (Rozenblatt-Rosen et al., *Cell* 2020;
+[doi:10.1016/j.cell.2020.03.053](https://doi.org/10.1016/j.cell.2020.03.053),
+PMID 32302568) frames the program around *transitions*: the points at which
+a tumour's behaviour changes, such as
+
+- the progression of a precancerous lesion to invasive cancer,
+- local expansion and metastasis, and
+- the response of a tumour to therapy and the emergence of resistance.
+
+Bulk sequencing of a single tumour sample averages over every cell in it and
+records one moment in time. HTAN's premise is that these transitions are
+driven by the interactions between tumour cells, immune cells, stroma and
+vasculature, and that seeing them needs measurements at single-cell
+resolution, in spatial context, and across time. HTAN centers therefore
+combine single-cell and single-nucleus sequencing, spatial transcriptomics,
+multiplexed tissue imaging, and conventional bulk sequencing and pathology,
+on biospecimens with detailed clinical annotation. Many participants
+contribute several biospecimens: serial sections of one block, several
+regions of a resection, or samples taken before and after treatment.
+
+## Phase 1
+
+Phase 1 had ten Research Centers, each building an atlas of one or more
+cancer types, and two NCI pilot projects, the Human Tumor Atlas Pilot
+Project (HTAPP) and the Pre-Cancer Atlas Pilot Project (PCAPP). A single
+Data Coordinating Center (DCC) set the data standards, ran ingestion and
+validation, and built the portal and the other routes to the data ([HTAN overview](https://humantumoratlas.org/overview);
+de Bruijn et al., *Nature Methods* 2025,
+[doi:10.1038/s41592-025-02643-0](https://doi.org/10.1038/s41592-025-02643-0)).
+Four Trans-Network Projects (TNPs) compared technologies across centers. The
+HTAN manual lists every Phase 1 center with its identifier prefix
+([HTAN centers](https://docs.humantumoratlas.org/overview/centers/)):
+
+| Prefix | Center | Focus |
+|---|---|---|
+| HTA1 | Human Tumor Atlas Pilot Project (HTAPP) | Pilot project |
+| HTA2 | Pre-Cancer Atlas Pilot Project (PCAPP) | Pilot project |
+| HTA3 | Boston University | Lung |
+| HTA4 | Children's Hospital of Philadelphia | Pediatric |
+| HTA5 | Dana-Farber Cancer Institute | Multiple cancer types |
+| HTA6 | Duke University | Breast |
+| HTA7 | Harvard Medical School | Melanoma, colorectal cancer, clonal hematopoiesis |
+| HTA8 | Memorial Sloan Kettering Cancer Center | Multiple cancer types |
+| HTA9 | Oregon Health & Science University | Breast |
+| HTA10 | Stanford University | Familial adenomatous polyposis |
+| HTA11 | Vanderbilt University | Colorectal |
+| HTA12 | Washington University in St. Louis | Multiple cancer types |
+| HTA13 | TNP: SARDANA | Technology comparison |
+| HTA14 | TNP: Tissue MicroArray (TMA) | Technology comparison |
+| HTA15 | TNP: SRRS | Technology comparison |
+| HTA16 | TNP: CASI | Technology comparison |
+
+Phase 1 data were released in seven numbered releases between May 2021 and
+November 2025 ([data release history](https://data.humantumoratlas.org/data-updates)).
+Release 7, published on 2025-11-26, is the last Phase 1 release and the one
+this package targets. The Phase 1 data model is archived
+([ncihtan/data-models](https://github.com/ncihtan/data-models)), so the
+release is effectively frozen. The DCC's 2025 paper counts 8,425
+biospecimens from 2,042 participants profiled with more than 20 assays; it
+was written before Release 7, and the [atlas overview](atlas-overview.html)
+recounts everything from the Release 7 tables themselves.
+
+## Phase 2
+
+Phase 2 funds ten new atlases, five of pre-cancer and five of cancer, with
+identifier prefixes HTA200 to HTA209. Its first data release, on
+2026-08-03, was 50 files from 11 participants of the prostate atlas
+([data release history](https://data.humantumoratlas.org/data-updates)).
+Phase 2 uses a new data model, aligned with the NCI Cancer Research Data
+Commons, that changes file formats, valid values and attributes, and marks
+biospecimen and data file identifiers with `B` and `D`
+([HTAN data model overview](https://docs.humantumoratlas.org/data_model/overview/),
+[identifiers](https://docs.humantumoratlas.org/data_model/identifiers/)).
+That model is still changing, and the ISB-CGC BigQuery tables for Phase 2
+did not exist when this package was written. **This package covers Phase 1
+only.** Phase 2 will be added once its tables settle.
+
+# How HTAN data are organised
+
+## Participants, biospecimens and files
+
+Every HTAN record hangs from a three-level hierarchy:
+
+1. A **participant** is a research participant (a patient or donor), with
+   clinical data: demographics, diagnosis, therapy, follow-up and more.
+2. A **biospecimen** is something taken from a participant (a biopsy, a
+   resection, a blood draw) or derived from another biospecimen (a block,
+   a section, a dissociated cell suspension, an extracted analyte).
+3. A **data file** is the output of an assay run on a biospecimen, or a
+   file computed from other files.
+
+Each level has an HTAN identifier that starts with the center prefix:
+`HTA11_7862` is a participant at Vanderbilt, `HTA11_7862_2000001011` is one
+of that participant's biospecimens, and `HTA11_7862_200000101134111` is a
+data file. The [data model vignette](data-model.html) covers the
+identifier grammar and its exceptions in detail.
+
+## Data levels
+
+Every assay's files are grouped into *levels*, from raw instrument output to
+analysis-ready summaries. The HTAN manual defines them per assay
+([file standards](https://docs.humantumoratlas.org/data_model/file_standards/),
+[metadata standards](https://docs.humantumoratlas.org/data_model/metadata_standards/)).
+In outline:
+
+| Level | Sequencing (scRNA-seq, bulk, scATAC-seq) | Multiplexed imaging (CyCIF, CODEX, MIBI, H&E, ...) | 10x Visium |
+|---|---|---|---|
+| 1 | Raw reads: FASTQ, unaligned BAM | Raw tiles before stitching and registration (rarely submitted) | FASTQ |
+| 2 | Aligned reads: BAM | One assembled image, preferably a tiled, pyramidal OME-TIFF | Aligned BAM |
+| 3 | Derived molecular data: gene-by-cell count matrices, VCFs | Segmentation masks, validated channel metadata, QC'd image | Space Ranger output: counts, spot positions, tissue image |
+| 4 | Sample-level summaries: annotated objects, embeddings, clusters | A cell-by-feature table (marker intensities, centroids, morphology) | Processed objects: clusters, embeddings, `.h5ad` or `.rds` |
+
+Other assays follow the same idea. RPPA has no Level 1; mass spectrometry
+runs from raw spectra (Level 1) to protein abundance (Level 4); and some
+newer assays, such as 10x Xenium, are submitted as a single experiment
+bundle instead of separate levels. Auxiliary files (for example Visium
+alignment images and QC reports) and "Other Assay" files have no level.
+
+In practice most users start at Level 3 or 4: a count matrix or an
+annotated single-cell object, or a cell-by-marker table for imaging. Those
+are the files this package reads.
+
+## Access tiers
+
+HTAN data are released in two tiers
+([data access](https://docs.humantumoratlas.org/data_access/introduction/)):
+
+- **Open access**: all metadata (clinical, biospecimen and file-level),
+  multiplexed and H&E images, and processed (Level 3 and 4) genomic data.
+- **Controlled access**: unprocessed genomic data (Level 1 and 2 sequencing:
+  FASTQ and BAM files), which could identify a participant. Access is
+  through dbGaP study
+  [phs002371](https://www.ncbi.nlm.nih.gov/projects/gap/cgi-bin/study.cgi?study_id=phs002371).
+
+The package records the tier of each file in the `access` column of
+`htan_files()`, with open files split by where they can be fetched from.
+
+## Where the data live, and why
+
+HTAN data are spread across several NCI and partner systems, each chosen for
+one job:
+
+| System | Holds | Access |
+|---|---|---|
+| [Synapse](https://www.synapse.org) (Sage Bionetworks) | Open Level 3 and 4 files, auxiliary files, submitted metadata | Free account and personal access token |
+| [CRDC General Commons](https://datacommons.cancer.gov/repository/general-commons) | Controlled Level 1/2 sequencing; open Level 2 images | dbGaP authorisation for controlled data; open images anonymously through GA4GH DRS |
+| [Imaging Data Commons](https://portal.imaging.datacommons.cancer.gov/) (IDC) | DICOM conversions of some HTAN slide images | Anonymous |
+| ISB-CGC BigQuery (`isb-cgc-bq.HTAN`, `isb-cgc-bq.HTAN_versioned`) | All open metadata tables, plus some processed expression and cell tables | Google Cloud account and a billing project |
+| [HTAN Data Portal](https://humantumoratlas.org/explore) | Search, summaries and manifests for every tier | Browser |
+
+Synapse is the DCC's ingestion platform: centers upload files and
+metadata there, and the DCC validates and releases them. The CRDC General
+Commons is NCI's long-term repository, and the only one of these systems
+that can hold dbGaP-controlled data. It also serves the open images,
+because image files are large and the CRDC is built for cloud-scale storage.
+IDC converts a subset of the slides to DICOM so they can be viewed in a
+browser alongside other NCI imaging collections. ISB-CGC loads every
+release's metadata into BigQuery for SQL analysis in Google Cloud
+([HTAN BigQuery](https://docs.humantumoratlas.org/data_access/biq_query/),
+[ISB-CGC HTAN notebooks](https://isb-cancer-genomics-cloud.readthedocs.io/en/latest/sections/HTANNotebooks.html)).
+
+For an R user, the consequence is that finding a file and fetching it are
+separate problems. The metadata tell you which files exist and how they
+relate; the file itself is on Synapse or the CRDC, behind different
+authentication.
+
+# What this package does, and what it doesn't
+
+*HTAN* is a client for the **open-access data of HTAN Phase 1**. It does
+five things:
+
+1. **Query metadata locally.** `htan_con()` opens a DuckDB connection over
+   a parquet snapshot of the ISB-CGC Release 7 metadata tables;
+   `htan_tables()`, `htan_tbl()` and `htan_columns()` list, open and
+   describe them; `htan_files()` gives one row per file with its assay,
+   level, participants, biospecimens and access tier. Queries are dplyr
+   code translated to SQL by dbplyr, so they run in DuckDB and only the
+   result is pulled into R.
+2. **Trace lineage.** `htan_lineage()` walks the `id_provenance` table from
+   a file to its ancestors (down to Level 1 and the biospecimen) or its
+   descendants.
+3. **Download open files.** `htan_download()` fetches open Level 2 images
+   anonymously from the CRDC General Commons, and Level 3/4 files from
+   Synapse with a personal access token. It checks each file's md5 and
+   guards against accidentally large downloads.
+4. **Read files into Bioconductor classes.** `read_htan()` turns `.h5ad`,
+   `.rds` (including Seurat objects), 10x `.h5`, Space Ranger output and
+   imaging cell tables into `SingleCellExperiment` or `SpatialExperiment`
+   objects.
+5. **Assemble a `MultiAssayExperiment`.** `htan_experiment()` combines
+   objects from several files, linking every cell or spot to its
+   participant and attaching clinical data.
+
+It does **not**:
+
+- download controlled-access data (it stops with a pointer to dbGaP and the
+  CRDC tools);
+- cover HTAN Phase 2;
+- query the large processed tables in BigQuery (single-cell expression and
+  imaging cell tables, about 2.4 TB), or BigQuery at all;
+- query IDC, CELLxGENE or the HTAN portal's database;
+- analyse images (images are returned as paths, for RBioFormats or
+  cytomapper).
+
+Level 4 files are heterogeneous: each center chose its own object classes,
+assay names and annotations. `read_htan()` is best effort, and you should
+check what it returns.
+
+# The metadata snapshot
+
+## What it is
+
+ISB-CGC publishes HTAN's metadata in two BigQuery datasets: `HTAN`, whose
+`_current` tables always point at the newest release, and
+`HTAN_versioned`, which keeps every release's tables under names such as
+`clinical_tier1_demographics_r7`. The snapshot is an export of the 78 tables
+that make up Release 7, each pinned to its versioned copy, written as zstd
+parquet with a manifest of checksums. It is published as the Hugging Face
+dataset [`seandavis/htan`](https://huggingface.co/datasets/seandavis/htan),
+one git tag per release, so `htan_con("r7")` always reads the same bytes.
+
+```{r snapshot-info}
+info <- htan_snapshot_info(con)
+info[c("release", "phase", "source", "n_tables", "total_rows", "build_date")]
+```
+
+The tables fall into two groups: clinical and biospecimen tables, and
+metadata tables (one or more per assay and level, plus `id_provenance`,
+`gc_drs_map` and the data-model `schema`):
+
+```{r table-groups}
+htan_tables(con) |>
+    count(category)
+```
+
+A few tables were not refreshed in Release 7, so the snapshot takes them
+from the last release that had them:
+
+```{r old-tables}
+htan_tables(con) |>
+    filter(source_version != "r7") |>
+    select(name, source_version, rows)
+```
+
+## How it relates to the authoritative sources
+
+The snapshot is a copy of a copy. The DCC's records in Synapse are the
+source of truth; ISB-CGC derives its BigQuery tables from them at each
+release; the snapshot is an export of those tables at one release. That has
+three consequences:
+
+- **It can lag or differ.** If the HTAN portal and the snapshot disagree,
+  the portal is right. Fixes made by the DCC after Release 7 reach the
+  snapshot only if ISB-CGC republishes the r7 tables and the snapshot is
+  rebuilt.
+- **It is unofficial.** The DCC does not host or endorse it. It
+  redistributes open-access metadata; HTAN's terms of use still apply, and
+  work that uses the data should cite HTAN's publications, as the
+  [HTAN manual](https://docs.humantumoratlas.org/data_access/citing_htan/)
+  asks.
+- **It holds metadata only.** File contents stay on Synapse and the CRDC.
+
+The trade is convenience: the snapshot needs no Google account or billing
+project, works offline once cached, and answers most questions in
+milliseconds. You can also browse it without R: the Hugging Face page has a
+data viewer and a SQL console, and DuckDB reads the files directly as
+`hf://datasets/seandavis/htan@r7/<table>.parquet`.
+
+To use a mirror or a local build, set `options(HTAN.base_url = ...)`. The
+package also ships a tiny fixture of the snapshot (all 78 tables cut down to
+six participants), which its examples and tests use:
+
+```{r fixture}
+#| eval: false
+fixture <- system.file("extdata", "snapshot", package = "HTAN")
+con_small <- htan_con("r7", base_url = fixture)
+```
+
+# A quick tour
+
+## Tables and columns
+
+`htan_tbl()` opens any table lazily. Here are the participants'
+demographics, summarised in DuckDB:
+
+```{r demographics}
+htan_tbl("clinical_tier1_demographics", con) |>
+    count(Gender, sort = TRUE) |>
+    collect()
+```
+
+The same value is spelled several ways: centers submitted their own
+metadata, and the DCC's validation did not normalise case. Clean values
+before you count or join on them:
+
+```{r demographics-clean}
+htan_tbl("clinical_tier1_demographics", con) |>
+    mutate(Gender = tolower(Gender)) |>
+    count(Gender, sort = TRUE) |>
+    collect()
+```
+
+`htan_columns()` returns the column descriptions recorded in the BigQuery
+schema, which is the quickest way to learn what a field means:
+
+```{r columns}
+htan_columns("id_provenance", con) |>
+    select(column, description)
+```
+
+## Files
+
+`htan_files()` combines every file-level table in the snapshot. Its columns
+include the `Component` (the assay and level, as HTAN names it), `assay` and
+`level` split out of it, the file `extension`, size and md5, the Synapse
+`entityId`, the General Commons `drs_uri`, the participants and
+biospecimens from `id_provenance`, and the `access` tier:
+
+```{r files}
+files <- htan_files(con = con)
+files |>
+    count(access) |>
+    arrange(desc(n)) |>
+    collect()
+```
+
+There are `r fmt(pull(count(files)))` files in Release 7. The tiers are:
+
+- `open-gc`: open Level 2 images in the General Commons, downloadable
+  anonymously;
+- `open-synapse`: open files on Synapse (Level 3/4, auxiliary and other
+  files, and the images that were never copied to the General Commons),
+  downloadable with a token;
+- `controlled`: Level 1/2 sequencing under dbGaP, which the package will
+  not download.
+
+Filters go straight into `htan_files()`. For example, every open
+single-cell Level 4 file in AnnData format:
+
+```{r files-h5ad}
+htan_files(assay == "ScRNA-seq", level == 4, extension == ".h5ad",
+    con = con) |>
+    select(HTAN_Data_File_ID, HTAN_Center, File_Size, n_participants) |>
+    arrange(File_Size) |>
+    collect()
+```
+
+Some files, such as merged single-cell objects, come from several
+participants; their `HTAN_Participant_ID` is a comma-separated list. To find
+every file that involves a participant, use the `participants` argument,
+which handles that case, rather than `==`:
+
+```{r files-participant}
+htan_files(participants = "HTA11_7862", con = con) |>
+    count(Component, access) |>
+    arrange(Component) |>
+    collect()
+```
+
+That one participant, from the Vanderbilt colorectal atlas, has Visium
+spatial transcriptomics, single-cell RNA-seq, whole-exome sequencing and
+imaging. The [analysis vignette](analysis-workflow.html) uses their Visium
+data.
+
+## Lineage
+
+`htan_lineage()` follows `HTAN_Parent_Data_File_ID` links in
+`id_provenance`. Depth 0 is the query file; negative depths are its
+ancestors:
+
+```{r lineage}
+htan_lineage("HTA11_7862_200000101134111", con = con) |>
+    select(related_file_id, depth, Filename) |>
+    arrange(depth, related_file_id) |>
+    collect() |>
+    mutate(Filename = basename(Filename))
+```
+
+The Level 4 Visium object was computed from four Level 3 Space Ranger
+files, which came from a Level 2 alignment, which came from two Level 1
+FASTQ files. The [data model vignette](data-model.html) explains how these
+links are recorded and where they get complicated.
+
+## Downloading files
+
+`htan_download()` routes each file by its `access` tier, checks its md5,
+and returns a table of local paths. An open image in the General Commons
+needs no account. This one is a 250 KB imaging mass cytometry image:
+
+```{r download-gc}
+tiff <- htan_files(
+    drs_uri == "dg.4DFC/6231a7d4-7e68-11ee-b51d-e7db3b9207b8", con = con)
+tiff |>
+    select(HTAN_Data_File_ID, Component, File_Size, access) |>
+    collect()
+dl <- htan_download(tiff, dest = tempfile("htan-"), con = con)
+dl$status
+read_htan(dl) |> basename()
+```
+
+`read_htan()` returns image paths unchanged; RBioFormats or cytomapper can
+read them.
+
+Processed files are on Synapse. To fetch them:
+
+1. create a free account at <https://www.synapse.org>;
+2. make a personal access token (Account Settings, then Personal Access
+   Tokens) with download permission;
+3. put it in the `SYNAPSE_AUTH_TOKEN` environment variable, for example in
+   `~/.Renviron`, and restart R.
+
+```{r download-synapse}
+#| eval: false
+visium <- htan_files(HTAN_Data_File_ID == "HTA11_7862_200000101134111",
+    con = con)
+dl <- htan_download(visium, dest = "htan-data", con = con)
+spe <- read_htan(dl)
+```
+
+Some HTAN files are tens of gigabytes. `htan_download()` refuses to start if
+the files total more than `max_bytes` (20 GB by default), and skips files
+already present with the right md5. Controlled files are refused with a
+classed error:
+
+```{r download-controlled}
+fastq <- htan_files(access == "controlled", con = con) |>
+    arrange(HTAN_Data_File_ID) |>
+    head(1)
+tryCatch(
+    htan_download(fastq, dest = tempfile(), con = con),
+    htan_error_controlled = function(e) cat(conditionMessage(e))
+)
+```
+
+## Reading and assembling
+
+`read_htan()` dispatches on the file extension:
+
+| File | Returns |
+|---|---|
+| `.h5ad` | `SingleCellExperiment` (via anndataR), or `SpatialExperiment` when there is a spatial embedding |
+| `.rds`, `.RData` | the object; Seurat objects become `SingleCellExperiment` |
+| 10x `.h5` | `SingleCellExperiment` (via TENxIO) |
+| Space Ranger `outs/` directory | `SpatialExperiment` (via VisiumIO) |
+| Imaging Level 4 `.csv` cell table | `SpatialExperiment`, cells as columns |
+| `.tif`, `.ome.tiff`, `.svs` | the path |
+
+`htan_experiment()` then builds a `MultiAssayExperiment` from a named list
+of objects, using the file IDs to find each object's participant and
+attaching that participant's demographics and diagnosis as `colData`. The
+[analysis vignette](analysis-workflow.html) does this with real data.
+
+# How these vignettes are built
+
+Bioconductor builds packages on machines without credentials and without
+network access, but these vignettes read the snapshot from Hugging Face,
+and one downloads from Synapse. So each vignette is written as a
+`.qmd.orig` source in the package repository and run ahead of time by
+`dev/precompute-vignettes.R` (`just precompute-vignettes`), which writes
+the `.qmd` you are reading, with its output and figures. Building the
+package only renders that markdown. The numbers in these vignettes are
+therefore the numbers at the time they were last precomputed; with a
+release pinned to `r7`, they should not change.
+
+# References
+
+- Rozenblatt-Rosen O, Regev A, Oberdoerffer P, et al. The Human Tumor
+  Atlas Network: charting tumor transitions across space and time at
+  single-cell resolution. *Cell* 2020;181(2):236-249.
+  [doi:10.1016/j.cell.2020.03.053](https://doi.org/10.1016/j.cell.2020.03.053).
+  PMID 32302568.
+- de Bruijn I, Nikolov M, Lau C, et al. Sharing data from the Human Tumor
+  Atlas Network through standards, infrastructure and community
+  engagement. *Nature Methods* 2025;22(4):664-671.
+  [doi:10.1038/s41592-025-02643-0](https://doi.org/10.1038/s41592-025-02643-0).
+  PMID 40164800.
+- HTAN website: <https://humantumoratlas.org>; data release history:
+  <https://data.humantumoratlas.org/data-updates>.
+- HTAN manual: <https://docs.humantumoratlas.org/>, in particular
+  [centers](https://docs.humantumoratlas.org/overview/centers/),
+  [identifiers](https://docs.humantumoratlas.org/data_model/identifiers/),
+  [file standards](https://docs.humantumoratlas.org/data_model/file_standards/),
+  [data access](https://docs.humantumoratlas.org/data_access/introduction/)
+  and [BigQuery](https://docs.humantumoratlas.org/data_access/biq_query/).
+- ISB-CGC HTAN notebooks:
+  <https://isb-cancer-genomics-cloud.readthedocs.io/en/latest/sections/HTANNotebooks.html>.
+- The metadata snapshot: <https://huggingface.co/datasets/seandavis/htan>.
+
+# Session information
+
+```{r session-info}
+sessionInfo()
+```
