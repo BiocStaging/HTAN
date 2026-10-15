@@ -1,6 +1,7 @@
 ---
 title: "Exploring the HTAN Phase 1 atlas"
 author: "Sean Davis"
+date: today
 format:
   html:
     toc: true
@@ -24,6 +25,10 @@ fmt <- function(x) format(x, big.mark = ",", scientific = FALSE)
 pct <- function(x, digits = 0) paste0(round(100 * x, digits), "%")
 tb <- function(x) paste(format(round(x / 1e12, 1), nsmall = 1), "TB")
 ```
+
+Package: [*HTAN*](https://bioconductor.org/packages/HTAN)
+`r packageVersion("HTAN")`
+([source](https://github.com/seandavi/HTAN)).
 
 This vignette describes HTAN Phase 1 as it stands in Release 7, the final
 Phase 1 release: who the participants are, where their samples came from,

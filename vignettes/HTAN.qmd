@@ -1,6 +1,7 @@
 ---
 title: "Introduction to HTAN"
 author: "Sean Davis"
+date: today
 format:
   html:
     toc: true
@@ -25,6 +26,40 @@ library(dplyr)
 fmt <- function(x) format(x, big.mark = ",", scientific = FALSE)
 ```
 
+Package: [*HTAN*](https://bioconductor.org/packages/HTAN)
+`r packageVersion("HTAN")`
+([source](https://github.com/seandavi/HTAN)).
+
+# Introduction
+
+The Human Tumor Atlas Network (HTAN) has released single-cell, spatial,
+imaging and bulk data from thousands of biospecimens, with detailed
+clinical and biospecimen annotation, but finding the right file, tracing what it was
+made from and getting it into an analysis takes several systems, each
+with its own interface. *HTAN* puts those steps in R: it queries HTAN's
+open-access metadata locally, follows the provenance links between
+files, downloads open files, and reads them into Bioconductor classes
+ready for analysis.
+
+Other ways to reach HTAN data, and how this package relates to them:
+
+- The [HTAN Data Portal](https://humantumoratlas.org/explore) is the place
+  to browse and search interactively. It exports file manifests, but it is
+  not a programming interface to the metadata.
+- [ISB-CGC](https://isb-cgc.org/) publishes every release's
+  metadata as Google BigQuery tables, queried in SQL (from R, with
+  bigrquery). That needs a Google Cloud account and a billing project.
+  *HTAN* reads a parquet snapshot of the same tables, with no account,
+  and works offline once it is cached.
+- Synapse's own clients download a file by its Synapse ID but know
+  nothing of HTAN's data model. *HTAN* finds the file from the metadata,
+  then downloads it from Synapse or the CRDC General Commons and checks
+  its md5.
+- [GenomicDataCommons](https://bioconductor.org/packages/GenomicDataCommons)
+  is the Bioconductor client for NCI's Genomic Data Commons, with a
+  similar query-then-download design. HTAN's data are not in the GDC,
+  so it does not reach them.
+
 This vignette introduces the Human Tumor Atlas Network (HTAN) and the
 *HTAN* package. It covers what the program is, how its data are organised and
 where they are stored, and what the package can and cannot do. It ends with a
@@ -43,19 +78,29 @@ short tour of the package. Three companion vignettes go further:
 The code in these vignettes runs against the real HTAN Release 7 metadata
 each time they are built (see [How these vignettes are built](#how-these-vignettes-are-built)).
 
-# Getting started
+# Installation
 
-Install the package from GitHub with BiocManager:
+Install the package from Bioconductor with BiocManager:
 
 ```{r install}
 #| eval: false
 if (!requireNamespace("BiocManager", quietly = TRUE)) {
     install.packages("BiocManager")
 }
+BiocManager::install("HTAN")
+```
+
+To install the development version from GitHub instead, for example
+before the package is available from Bioconductor:
+
+```{r install-github}
+#| eval: false
 BiocManager::install("seandavi/HTAN")
 ```
 
-Load it, together with dplyr, which is the query language for everything
+# Getting started
+
+Load the package, together with dplyr, which is the query language for everything
 that follows:
 
 ```{r load}
@@ -382,9 +427,10 @@ package also ships a tiny fixture of the snapshot (all 78 tables cut down to
 six participants), which its examples and tests use:
 
 ```{r fixture}
-#| eval: false
 fixture <- system.file("extdata", "snapshot", package = "HTAN")
 con_small <- htan_con("r7", base_url = fixture)
+htan_snapshot_info(con_small)[c("release", "n_tables", "total_rows")]
+htan_disconnect(con_small)
 ```
 
 # A quick tour
@@ -470,8 +516,8 @@ htan_files(participants = "HTA11_7862", con = con) |>
 
 That one participant, from the Vanderbilt colorectal atlas, has Visium
 spatial transcriptomics, single-cell RNA-seq, whole-exome sequencing and
-imaging. The [analysis vignette](analysis-workflow.html) uses their Visium
-data.
+imaging. The [analysis vignette](analysis-workflow.html) analyses a Visium
+section from another Vanderbilt participant.
 
 ## Lineage
 
@@ -520,9 +566,13 @@ Processed files are on Synapse. To fetch them:
 3. put it in the `SYNAPSE_AUTH_TOKEN` environment variable, for example in
    `~/.Renviron`, and restart R.
 
+This chunk is not run when the vignette is built, because it needs a
+token; the [analysis vignette](analysis-workflow.html) runs the same steps
+when one is set.
+
 ```{r download-synapse}
 #| eval: false
-visium <- htan_files(HTAN_Data_File_ID == "HTA11_7862_200000101134111",
+visium <- htan_files(HTAN_Data_File_ID == "HTA11_99999933430_8422134111",
     con = con)
 dl <- htan_download(visium, dest = "htan-data", con = con)
 spe <- read_htan(dl)
