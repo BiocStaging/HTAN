@@ -11,16 +11,30 @@
 #' * `"controlled"`: Level 1/2 sequencing (dbGaP phs002371). Not supported;
 #'   requesting one is an error.
 #'
-#' Files are written to `<dest>/<Filename>`, keeping the directory layout in
-#' HTAN's `Filename` (so 10x/Visium bundles stay together), and checked
-#' against the md5 in the metadata. A file already present with the right
-#' md5 is not downloaded again.
+#' Downloads are cached. Each file is kept in a BiocFileCache, keyed by its
+#' `HTAN_Data_File_ID` and md5, under the same relative path as HTAN's
+#' `Filename` (so 10x/Visium bundles stay together), and checked against
+#' the md5 in the metadata before it enters the cache. Asking for a file
+#' again is served from the cache after checking its md5 again; a cached
+#' copy that no longer matches is downloaded afresh. Nothing is written to
+#' the working directory.
+#'
+#' The cache is the `downloads` directory inside the snapshot cache of
+#' [htan_con()] (option `HTAN.cache`, then
+#' `tools::R_user_dir("HTAN", "cache")`), or option `HTAN.download_cache`
+#' if set. It is a BiocFileCache of its own, so it can be moved or cleared
+#' without touching the snapshot, e.g. with `BiocFileCache::removebfc()`.
+#'
+#' With `dest`, each file is also copied to `<dest>/<Filename>`, and a copy
+#' already there with the right md5 is used as is.
 #'
 #' @param files The files to fetch: the result of [htan_files()] (lazy or
 #'     collected), or a character vector of `HTAN_Data_File_ID`s.
-#' @param dest `character(1)`. Directory to download into.
+#' @param dest `character(1)` or `NULL`. A directory to copy the files to,
+#'     as well as caching them. `NULL` (the default, unless option
+#'     `HTAN.download_dir` is set) returns the paths in the cache.
 #' @param overwrite `logical(1)`. Download again even if a verified copy is
-#'     present.
+#'     cached or present in `dest`.
 #' @param max_bytes `numeric(1)`. Refuse to start if the files total more
 #'     than this many bytes (Level 2 images are often several GB each).
 #' @param token `character(1)`. Synapse personal access token, only needed
@@ -28,7 +42,9 @@
 #' @inheritParams htan_tables
 #'
 #' @return A tibble, one row per file: `HTAN_Data_File_ID`, `access`, `path`
-#'     and `status` (`"downloaded"` or `"present"`).
+#'     (in the cache, or in `dest` if given) and `status`: `"downloaded"`
+#'     (fetched now), `"cached"` (served from the cache) or `"present"`
+#'     (already in `dest`).
 #'
 #' @examples
 #' fixture <- system.file("extdata", "snapshot", package = "HTAN")
@@ -36,43 +52,105 @@
 #' ## a 250 KB open IMC image, fetched anonymously from General Commons
 #' tiff <- htan_files(drs_uri == "dg.4DFC/6231a7d4-7e68-11ee-b51d-e7db3b9207b8",
 #'     con = con)
-#' \dontrun{
-#' htan_download(tiff, dest = tempfile(), con = con)
+#' \donttest{
+#' dl <- htan_download(tiff, con = con)
+#' dl$status
+#' ## a second call is served from the cache
+#' htan_download(tiff, con = con)$status
 #' }
 #'
 #' @export
 htan_download <- function(
     files,
-    dest = getOption("HTAN.download_dir", "."),
+    dest = getOption("HTAN.download_dir"),
     overwrite = FALSE,
     max_bytes = getOption("HTAN.max_download_bytes", 20e9),
     token = Sys.getenv("SYNAPSE_AUTH_TOKEN"),
     con = htan_con()
 ) {
-    .check_string(dest, "dest")
+    if (!is.null(dest)) {
+        .check_string(dest, "dest")
+    }
     plan <- .download_plan(files, con)
     .check_downloadable(plan, max_bytes, token)
-    dir.create(dest, recursive = TRUE, showWarnings = FALSE)
+    bfc <- .bfc(.download_cache_dir())
     rows <- lapply(seq_len(nrow(plan)), function(i) {
         f <- plan[i, ]
-        path <- .dest_path(dest, f$Filename)
-        if (!overwrite && file.exists(path) && .md5_ok(path, f$md5)) {
-            status <- "present"
-        } else {
-            dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
-            url <- switch(f$access,
-                "open-gc" = .drs_access_url(f$drs_uri),
-                "open-synapse" = .synapse_download_url(f$entityId, token)
-            )
-            .fetch_verified(url, path, f)
-            status <- "downloaded"
-        }
+        got <- .download_one(f, bfc, dest, overwrite, token)
         tibble::tibble(HTAN_Data_File_ID = f$HTAN_Data_File_ID,
-            access = f$access, path = path, status = status)
+            access = f$access, path = got$path, status = got$status)
     })
     do.call(rbind, c(list(tibble::tibble(HTAN_Data_File_ID = character(),
         access = character(), path = character(), status = character())),
         rows))
+}
+
+## ---- cache ---------------------------------------------------------------
+
+## Downloads get a BiocFileCache of their own, inside the snapshot cache
+## directory: data files can be thousands of times larger than the
+## snapshot and are cleared or moved separately, and the snapshot cache
+## stays private to R/connection.R.
+.download_cache_dir <- function() {
+    getOption("HTAN.download_cache", file.path(
+        getOption("HTAN.cache", tools::R_user_dir("HTAN", "cache")),
+        "downloads"))
+}
+
+.file_rname <- function(f) {
+    md5 <- if (is.na(f$md5)) "" else tolower(f$md5)
+    paste0("htan-file:", f$HTAN_Data_File_ID, ":", md5)
+}
+
+## One file: use the copy in `dest` if it is already there, else the
+## cache (fetching into it if needed), copied on to `dest` if given.
+.download_one <- function(f, bfc, dest, overwrite, token) {
+    out <- if (!is.null(dest)) .dest_path(dest, f$Filename)
+    if (!overwrite && !is.null(out) && file.exists(out) &&
+        .md5_ok(out, f$md5)) {
+        return(list(path = out, status = "present"))
+    }
+    got <- .cached_file(f, bfc, overwrite, token)
+    if (is.null(out)) {
+        return(got)
+    }
+    dir.create(dirname(out), recursive = TRUE, showWarnings = FALSE)
+    if (!file.copy(got$path, out, overwrite = TRUE)) {
+        rlang::abort(sprintf("Could not copy %s to %s.", got$path, out),
+            class = c("htan_error_dest", "htan_error"))
+    }
+    list(path = out, status = got$status)
+}
+
+## Cached files keep HTAN's relative layout inside the cache directory, so
+## bundles stay together, and are registered where they are (action
+## "asis") as `htan-file:<ID>:<md5>`. A hit is used only if its md5 still
+## matches; a stale entry is removed and the file fetched again.
+.cached_file <- function(f, bfc, overwrite, token) {
+    rname <- .file_rname(f)
+    hit <- .bfc_hit(bfc, rname)
+    if (!is.null(hit)) {
+        if (!overwrite && file.exists(hit) && .md5_ok(hit, f$md5)) {
+            return(list(path = unname(hit), status = "cached"))
+        }
+        BiocFileCache::bfcremove(bfc, names(hit))
+    }
+    path <- .dest_path(BiocFileCache::bfccache(bfc), f$Filename)
+    ## Already in place under another key (r7 has a few Filenames shared by
+    ## two file IDs, with the same md5): register it rather than refetch.
+    status <- "cached"
+    if (overwrite || !file.exists(path) || !.md5_ok(path, f$md5)) {
+        dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
+        url <- switch(f$access,
+            "open-gc" = .drs_access_url(f$drs_uri),
+            "open-synapse" = .synapse_download_url(f$entityId, token)
+        )
+        .fetch_verified(url, path, f)
+        status <- "downloaded"
+    }
+    BiocFileCache::bfcadd(bfc, rname, fpath = path, rtype = "local",
+        action = "asis")
+    list(path = path, status = status)
 }
 
 ## ---- planning ------------------------------------------------------------
@@ -157,7 +235,8 @@ htan_download <- function(
     invisible(plan)
 }
 
-## Keep HTAN's relative layout, but never write outside `dest`.
+## Keep HTAN's relative layout under `dest` (a user directory or the
+## download cache), but never write outside it.
 .dest_path <- function(dest, filename) {
     parts <- strsplit(gsub("\\\\", "/", filename), "/", fixed = TRUE)[[1L]]
     parts <- parts[nzchar(parts) & parts != "."]
@@ -290,7 +369,11 @@ htan_download <- function(
             class = c("htan_error_checksum", "htan_error")
         )
     }
-    file.rename(tmp, path)
+    unlink(path)
+    if (!file.rename(tmp, path)) {
+        rlang::abort(sprintf("Could not move the download to %s.", path),
+            class = c("htan_error_cache", "htan_error"))
+    }
     invisible(path)
 }
 

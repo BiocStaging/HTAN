@@ -28,16 +28,21 @@ R/connection.R htan_con()  -> BiocFileCache -> DuckDB, one VIEW per table
 R/tables.R     htan_tables(), htan_tbl()
 R/files.R      htan_files()            (file-level convenience tbl)
 R/lineage.R    htan_lineage()          (id_provenance)
-R/download.R   htan_download()         (DRS anonymous / Synapse PAT)
+R/download.R   htan_download()         (DRS anonymous / Synapse PAT,
+                                        cached in <cache>/downloads)
 R/read.R       read_htan()             (format dispatch to Bioc classes)
 R/experiment.R htan_experiment()       (MultiAssayExperiment)
 ```
 
 Rules that keep the seam clean:
 
-- Only `R/connection.R` knows about manifests, caching and parquet. Other
-  files take a `con` argument defaulting to `htan_con()` and use
-  `DBI`/`dbplyr` on it.
+- Only `R/connection.R` knows about manifests, the snapshot cache and
+  parquet. Other files take a `con` argument defaulting to `htan_con()`
+  and use `DBI`/`dbplyr` on it.
+- Downloaded data files live in a separate BiocFileCache owned by
+  `R/download.R` (`<cache>/downloads`, ADR-0004), reached through the
+  shared `.bfc()`/`.bfc_hit()` helpers. Never write to `getwd()` by
+  default.
 - Return lazy dbplyr tables from query functions; collect only when the
   function must (download, read, experiment assembly).
 - Always pin a release (`"r7"`). Never read `_current` semantics into code.

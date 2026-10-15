@@ -45,7 +45,15 @@ htan_lineage <- function(
         descendants = .walk_sql("down"),
         both = paste(.walk_sql("up"), "UNION", .walk_sql("down"))
     )
-    sql <- sprintf("
+    sql <- sprintf(.lineage_sql, seed, as.integer(max_depth),
+        as.integer(max_depth), walks)
+    dplyr::tbl(con, dbplyr::sql(sql))
+}
+
+## The recursive walk, filled in by htan_lineage() with the seed IDs,
+## max_depth (twice) and the walks to union. Kept out of the function so
+## the R logic stays short; this is SQL text.
+.lineage_sql <- "
 WITH RECURSIVE
 seed(id) AS (VALUES %s),
 -- MATERIALIZED is load-bearing: with DuckDB 1.5.5, an inlined `edges` makes
@@ -96,10 +104,7 @@ SELECT w.query AS HTAN_Data_File_ID, w.file AS related_file_id,
         AS HTAN_Originating_Biospecimen_ID
 FROM walk w
 LEFT JOIN nodes n ON n.HTAN_Data_File_ID = w.file
-GROUP BY w.query, w.file",
-        seed, as.integer(max_depth), as.integer(max_depth), walks)
-    dplyr::tbl(con, dbplyr::sql(sql))
-}
+GROUP BY w.query, w.file"
 
 .walk_sql <- function(which) {
     sprintf("SELECT query, file, depth FROM %s", which)

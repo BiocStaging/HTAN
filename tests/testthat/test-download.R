@@ -81,6 +81,99 @@ test_that("open General Commons files download anonymously via DRS", {
     expect_null(again$calls)
 })
 
+test_that("by default files go to the cache, not the working directory", {
+    cache <- local_fixture_snapshot()
+    wd <- withr::local_tempdir()
+    withr::local_dir(wd)
+    files <- mock_files(drs_uri == !!tiff_drs)
+    out <- httr2::with_mocked_responses(mock_services(new.env()), {
+        htan_download(files, token = "")
+    })
+    expect_identical(out$status, "downloaded")
+    expect_true(startsWith(normalizePath(out$path),
+        normalizePath(file.path(cache, "downloads"))))
+    expect_true(endsWith(out$path, files$Filename))
+    expect_identical(readBin(out$path, "raw", 100), charToRaw("pixels"))
+    expect_length(list.files(wd, recursive = TRUE, all.files = TRUE), 0L)
+
+    bfc <- BiocFileCache::BiocFileCache(file.path(cache, "downloads"),
+        ask = FALSE)
+    info <- BiocFileCache::bfcinfo(bfc)
+    expect_identical(info$rname, paste0("htan-file:",
+        files$HTAN_Data_File_ID, ":", files$md5))
+})
+
+test_that("repeat downloads are served from the cache", {
+    local_fixture_snapshot()
+    files <- mock_files(drs_uri == !!tiff_drs)
+    first <- httr2::with_mocked_responses(mock_services(new.env()), {
+        htan_download(files, token = "")
+    })
+    log <- new.env()
+    again <- httr2::with_mocked_responses(mock_services(log), {
+        htan_download(files, token = "")
+    })
+    expect_identical(again$status, "cached")
+    expect_identical(again$path, first$path)
+    expect_null(log$calls)
+
+    ## a new `dest` is filled from the cache, with no request
+    dest <- withr::local_tempdir()
+    log <- new.env()
+    copied <- httr2::with_mocked_responses(mock_services(log), {
+        htan_download(files, dest = dest, token = "")
+    })
+    expect_identical(copied$status, "cached")
+    expect_identical(copied$path, file.path(dest, files$Filename))
+    expect_identical(readBin(copied$path, "raw", 100), charToRaw("pixels"))
+    expect_null(log$calls)
+
+    ## overwrite = TRUE fetches again
+    log <- new.env()
+    fresh <- httr2::with_mocked_responses(mock_services(log), {
+        htan_download(files, overwrite = TRUE, token = "")
+    })
+    expect_identical(fresh$status, "downloaded")
+    expect_false(is.null(log$calls))
+})
+
+test_that("a cached copy that fails its md5 is downloaded again", {
+    local_fixture_snapshot()
+    files <- mock_files(drs_uri == !!tiff_drs)
+    first <- httr2::with_mocked_responses(mock_services(new.env()), {
+        htan_download(files, token = "")
+    })
+    writeBin(charToRaw("corrupt"), first$path)
+    log <- new.env()
+    again <- httr2::with_mocked_responses(mock_services(log), {
+        htan_download(files, token = "")
+    })
+    expect_identical(again$status, "downloaded")
+    expect_identical(again$path, first$path)
+    expect_identical(readBin(again$path, "raw", 100), charToRaw("pixels"))
+    expect_false(is.null(log$calls))
+
+    ## so is one deleted behind the cache's back
+    unlink(first$path)
+    gone <- httr2::with_mocked_responses(mock_services(new.env()), {
+        htan_download(files, token = "")
+    })
+    expect_identical(gone$status, "downloaded")
+    expect_true(file.exists(gone$path))
+})
+
+test_that("option HTAN.download_cache moves the download cache", {
+    local_fixture_snapshot()
+    elsewhere <- withr::local_tempdir()
+    withr::local_options(HTAN.download_cache = elsewhere)
+    files <- mock_files(drs_uri == !!tiff_drs)
+    out <- httr2::with_mocked_responses(mock_services(new.env()), {
+        htan_download(files, token = "")
+    })
+    expect_true(startsWith(normalizePath(out$path),
+        normalizePath(elsewhere)))
+})
+
 test_that("Synapse files use the token, and only with Synapse", {
     local_fixture_snapshot()
     dest <- withr::local_tempdir()
@@ -128,7 +221,7 @@ test_that("controlled files are refused before any request", {
 })
 
 test_that("a checksum mismatch leaves nothing behind", {
-    local_fixture_snapshot()
+    cache <- local_fixture_snapshot()
     dest <- withr::local_tempdir()
     files <- mock_files(drs_uri == !!tiff_drs)
     files$md5 <- "00000000000000000000000000000000"
@@ -137,6 +230,11 @@ test_that("a checksum mismatch leaves nothing behind", {
             class = "htan_error_checksum")
     })
     expect_length(list.files(dest, recursive = TRUE), 0L)
+    downloads <- file.path(cache, "downloads")
+    expect_length(grep("^BiocFileCache[.]sqlite",
+        list.files(downloads, recursive = TRUE), invert = TRUE), 0L)
+    bfc <- BiocFileCache::BiocFileCache(downloads, ask = FALSE)
+    expect_identical(nrow(BiocFileCache::bfcinfo(bfc)), 0L)
 })
 
 test_that("size guard, ID lookup and path safety", {
@@ -157,11 +255,12 @@ test_that("size guard, ID lookup and path safety", {
 test_that("live: anonymous DRS download of an open IMC image", {
     skip_if_no_integration()
     local_fixture_snapshot()
-    dest <- withr::local_tempdir()
     files <- dplyr::collect(htan_files(drs_uri == !!tiff_drs))
-    out <- htan_download(files, dest = dest)
+    out <- htan_download(files)
+    expect_identical(out$status, "downloaded")
     expect_identical(unname(tools::md5sum(out$path)), files$md5)
     expect_equal(file.size(out$path), files$File_Size)
+    expect_identical(htan_download(files)$status, "cached")
 })
 
 test_that("live: Synapse download with SYNAPSE_AUTH_TOKEN", {

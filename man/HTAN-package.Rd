@@ -43,5 +43,10 @@ Authors:
   \item Sean Davis \email{seandavi@gmail.com} (\href{https://orcid.org/0000-0002-8991-6458}{ORCID})
 }
 
+Other contributors:
+\itemize{
+  \item National Cancer Institute (Grant U24CA289073) [funder]
+}
+
 }
 \keyword{internal}
