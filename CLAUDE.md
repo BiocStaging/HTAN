@@ -57,7 +57,6 @@ just document   # roxygen2: regenerate man/ and NAMESPACE (never hand-edit them)
 just test       # testthat, offline
 just check      # R CMD build + R CMD check
 just bioccheck  # BiocCheck
-just precompute-vignettes  # rebuild vignettes/*.qmd (network; Synapse token for analysis-workflow)
 just snapshot   # run the Python snapshot builder (needs gcloud auth)
 ```
 
@@ -66,15 +65,19 @@ a different roxygen2 reformats every Rd file.
 
 ## Vignettes
 
-Precomputed, as in GEOquery. Edit `vignettes/<name>.qmd.orig` (live code),
-then run `just precompute-vignettes [name]`, which knits it to
-`vignettes/<name>.qmd` with output and figures (`vignettes/figures/`).
-Commit all three. Never hand-edit the `.qmd`. The build only renders the
-markdown (`VignetteBuilder: quarto`), with no network. Write numbers in
-prose as inline R, never by hand. `analysis-workflow` gates its Synapse
-chunks on `SYNAPSE_AUTH_TOKEN` (`#| eval: !expr have_token`); without a
-token they are shown without output. Attach Bioconductor packages before
-dplyr, or their `count()`/`desc()`/`slice()` mask dplyr's.
+Live: `vignettes/<name>.qmd` is the source, and `R CMD build`
+(`VignetteBuilder: quarto`) runs every chunk against the real r7 snapshot
+from Hugging Face (`htan_con("r7")`, about 20 MB, cached by
+BiocFileCache). No precompute step and no generated files are committed.
+Render one locally with `quarto render vignettes/<name>.qmd` (output is
+gitignored); it needs the package installed. Write numbers in prose as
+inline R, never by hand. `analysis-workflow` gates its Synapse chunks on
+`SYNAPSE_AUTH_TOKEN` (`#| eval: !expr have_token`); without a token
+(Bioconductor builders, fork PRs) they are shown without output, so prose
+that quotes their results goes through `result(value, otherwise)` and
+must read correctly either way. CI passes the read-only token from the
+repo secret. Attach Bioconductor packages before dplyr, or their
+`count()`/`desc()`/`slice()` mask dplyr's.
 
 ## Tests
 
