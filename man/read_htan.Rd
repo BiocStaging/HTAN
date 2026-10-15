@@ -31,7 +31,11 @@ Dispatches on the file extension (HTAN's \code{File_Format} is too coarse:
 \describe{
 \item{\code{.h5ad}}{\code{anndataR::read_h5ad()} to a \code{SingleCellExperiment}; a
 \code{spatial} embedding becomes \code{spatialCoords()} of a
-\code{SpatialExperiment}.}
+\code{SpatialExperiment}. Files in the pre-0.8 AnnData layout, which
+anndataR rejects and many HTAN centers wrote, are read with rhdf5
+instead: \code{X}, \code{layers}, \code{obs}, \code{var} and numeric \code{obsm} arrays, but
+not \code{uns}. Duplicated \code{obs} or \code{var} names are made unique with
+\code{\link[=make.unique]{make.unique()}}, with a message.}
 \item{\code{.rds}, \code{.rda}, \code{.RData}}{Read, then: \code{SingleCellExperiment} and
 other \code{SummarizedExperiment}s pass through; a Seurat object is
 converted with SeuratObject (counts, data, metadata, reductions, and
@@ -58,5 +62,11 @@ cells <- data.frame(CellID = 1:3, CD3 = c(1, 5, 2), CD8 = c(0, 3, 1),
 path <- tempfile(fileext = ".csv")
 write.csv(cells, path, row.names = FALSE)
 read_htan(path)
+
+## A tiny Visium file in the pre-0.8 AnnData layout
+if (requireNamespace("rhdf5", quietly = TRUE)) {
+    read_htan(system.file("extdata", "h5ad", "legacy_visium.h5ad",
+        package = "HTAN"))
+}
 
 }
