@@ -70,7 +70,8 @@ test_that("Seurat objects convert to SingleCellExperiment", {
         assay = "RNA")
     path <- withr::local_tempfile(fileext = ".rds")
     saveRDS(so, path)
-    sce <- read_htan(path)
+    ## A v5 assay has no `data` layer; asking for it would warn.
+    expect_no_warning(sce <- read_htan(path))
     expect_s4_class(sce, "SingleCellExperiment")
     expect_equal(dim(sce), c(10L, 6L))
     expect_identical(sce$cluster, unname(so$cluster[colnames(sce)]))

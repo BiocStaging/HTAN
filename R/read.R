@@ -120,8 +120,8 @@ read_htan <- function(x, coords = NULL, ...) {
     if (!length(hit)) {
         return(sce)
     }
-    xy <- as.matrix(SingleCellExperiment::reducedDim(sce, hit[1L]))[, 1:2,
-        drop = FALSE]
+    xy <- as.matrix(SingleCellExperiment::reducedDim(sce, hit[1L]))[,
+        seq_len(2L), drop = FALSE]
     colnames(xy) <- c("x", "y")
     SingleCellExperiment::reducedDim(sce, hit[1L]) <- NULL
     spe <- methods::as(sce, "SpatialExperiment")
@@ -150,7 +150,8 @@ read_htan <- function(x, coords = NULL, ...) {
     rlang::inform(
         c(sprintf("%s holds a '%s', returned as is.", basename(path),
             class(obj)[1L]),
-            i = "read_htan() converts Seurat and SummarizedExperiment objects."),
+            i = paste("read_htan() converts Seurat and",
+                "SummarizedExperiment objects.")),
         class = "htan_message_unconverted"
     )
     obj
@@ -164,9 +165,16 @@ read_htan <- function(x, coords = NULL, ...) {
     obj <- tryCatch(SeuratObject::UpdateSeuratObject(obj),
         error = function(e) obj)
     assay <- SeuratObject::DefaultAssay(obj)
+    ## Ask only for layers that exist: LayerData() warns "Layer '...' is
+    ## empty" for a missing one (e.g. `data` in a fresh v5 assay).
+    have <- tryCatch(SeuratObject::Layers(obj, assay = assay),
+        error = function(e) character())
     layer <- function(name) {
-        m <- tryCatch(suppressWarnings(
-            SeuratObject::LayerData(obj, assay = assay, layer = name)),
+        if (!name %in% have) {
+            return(NULL)
+        }
+        m <- tryCatch(
+            SeuratObject::LayerData(obj, assay = assay, layer = name),
             error = function(e) NULL)
         if (is.null(m) || !all(dim(m) == dim(obj[[assay]]))) NULL else m
     }
@@ -204,7 +212,7 @@ read_htan <- function(x, coords = NULL, ...) {
             "returning a SingleCellExperiment.")
         return(sce)
     }
-    xy <- as.matrix(xy[colnames(sce), 1:2])
+    xy <- as.matrix(xy[colnames(sce), seq_len(2L)])
     colnames(xy) <- c("x", "y")
     spe <- methods::as(sce, "SpatialExperiment")
     SpatialExperiment::spatialCoords(spe) <- xy
