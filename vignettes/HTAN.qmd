@@ -575,7 +575,8 @@ when one is set.
 #| eval: false
 visium <- htan_files(HTAN_Data_File_ID == "HTA11_99999933430_8422134111",
     con = con)
-dl <- htan_download(visium, dest = "htan-data", con = con)
+dl <- htan_download(visium, dest = file.path(tempdir(), "htan-data"),
+    con = con)
 spe <- read_htan(dl)
 ```
 
