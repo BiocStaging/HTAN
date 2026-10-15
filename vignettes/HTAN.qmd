@@ -570,7 +570,7 @@ tiff <- htan_files(
 tiff |>
     select(HTAN_Data_File_ID, Component, File_Size, access) |>
     collect()
-dl <- htan_download(tiff, dest = tempfile("htan-"), con = con)
+dl <- htan_download(tiff, con = con)
 dl$status
 read_htan(dl) |> basename()
 ```
@@ -595,14 +595,15 @@ when one is set.
 #| eval: false
 visium <- htan_files(HTAN_Data_File_ID == "HTA11_99999933430_8422134111",
     con = con)
-dl <- htan_download(visium, dest = file.path(tempdir(), "htan-data"),
-    con = con)
+dl <- htan_download(visium, con = con)
 spe <- read_htan(dl)
 ```
 
 Some HTAN files are tens of gigabytes. `htan_download()` refuses to start if
-the files total more than `max_bytes` (20 GB by default), and skips files
-already present with the right md5. Controlled files are refused with a
+the files total more than `max_bytes` (20 GB by default), and keeps every
+file it fetches in a download cache: asking again is served from the
+cache, after rechecking the md5, without downloading. Pass `dest` to also
+copy the files to a directory of your choice. Controlled files are refused with a
 classed error:
 
 ```{r}
@@ -611,7 +612,7 @@ fastq <- htan_files(access == "controlled", con = con) |>
     arrange(HTAN_Data_File_ID) |>
     head(1)
 tryCatch(
-    htan_download(fastq, dest = tempfile(), con = con),
+    htan_download(fastq, con = con),
     htan_error_controlled = function(e) cat(conditionMessage(e))
 )
 ```
