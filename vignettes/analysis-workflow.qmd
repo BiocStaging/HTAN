@@ -1,45 +1,63 @@
 ---
 title: "From query to analysis"
 author: "Sean Davis"
+date: today
 format:
   html:
     toc: true
     toc-depth: 3
+    fig-width: 7
+    fig-height: 4.5
+knitr:
+  opts_chunk:
+    comment: "#>"
+    collapse: true
+    message: false
+    fig.retina: 1
 vignette: >
   %\VignetteIndexEntry{From query to analysis}
   %\VignetteEngine{quarto::html}
   %\VignetteEncoding{UTF-8}
 ---
 
+```{r}
+#| label: setup
+#| include: false
+## Chunks that download from Synapse run only when a token is available.
+have_token <- nzchar(Sys.getenv("SYNAPSE_AUTH_TOKEN"))
+fmt <- function(x) format(x, big.mark = ",", scientific = FALSE)
+pct <- function(x, digits = 0) paste0(round(100 * x, digits), "%")
+## An analysis result quoted in the prose: `value` when the Synapse steps
+## ran, `otherwise` (text that does not depend on them) when they did not.
+## `value` is only evaluated when there is a token.
+result <- function(value, otherwise = "") {
+    if (have_token) value else otherwise
+}
+code_list <- function(x) paste0("`", x, "`", collapse = ", ")
+```
 
-
-::: {.callout-note}
-## Outputs pending
-
-This copy of the vignette was precomputed without a Synapse token.
-The query and lineage steps below ran against the real Release 7
-metadata and show their output. The download and analysis steps
-need a Synapse personal access token, so their code is shown
-without output. Their output appears once the maintainer
-precomputes the vignette with `SYNAPSE_AUTH_TOKEN` set
-(`just precompute-vignettes analysis-workflow`).
-:::
+Package: [*HTAN*](https://bioconductor.org/packages/HTAN)
+`r packageVersion("HTAN")`
+([source](https://github.com/seandavi/HTAN)).
 
 This vignette follows one HTAN dataset from a metadata query to a
-biological result. It picks a small open spatial transcriptomics dataset,
-confirms where it came from, downloads it, reads it into a
+biological result. It picks a small open spatial transcriptomics section
+of the colon, confirms where it came from, downloads it, reads it into a
 `SpatialExperiment`, wraps it with clinical data in a
 `MultiAssayExperiment`, and runs a short analysis: quality control,
 normalisation, clustering and spatial plots. Along the way it explains why
 each step is done the way it is.
 
 It assumes the [introduction](HTAN.html) and the
-[data model vignette](data-model.html). The download step needs a free
-Synapse account and a personal access token in `SYNAPSE_AUTH_TOKEN` (see
-the introduction).
+[data model vignette](data-model.html). The metadata steps run anywhere.
+The download, and every step after it, needs a free Synapse account and a
+personal access token in `SYNAPSE_AUTH_TOKEN` (see the introduction), so
+where the vignette is built without a token, for example on the
+Bioconductor build machines, that code is shown without being run.
 
-
-``` r
+```{r}
+#| label: packages
+#| warning: false
 library(SpatialExperiment)
 library(scater)
 library(scrapper)
@@ -57,22 +75,21 @@ is attached last.
 
 ## The question
 
-The Vanderbilt atlas (HTA11) studied colorectal precancer: adenomatous and
-serrated polyps, the lesions from which most colorectal cancers arise. A
-polyp is a good first spatial dataset. Its tissue has an obvious
-architecture (epithelial crypts, the stroma of the lamina propria, immune
-aggregates), so a correct analysis should recover recognisable regions, and
-a premalignant lesion is exactly the kind of transition HTAN was set up to
-study.
+The Vanderbilt atlas (HTA11) studied colorectal precancer and cancer. A
+section of colon is a good first spatial dataset. The colonic mucosa has
+an obvious architecture (epithelial crypts, the stroma of the lamina
+propria, immune cells), so the expression clusters of a correct analysis
+can be checked against recognisable tissue compartments, and against what
+the metadata say the tissue is.
 
 ## Finding candidate files
 
 10x Visium measures the transcriptome in a grid of 55 µm spots across a
 tissue section. Level 4 Visium files are processed objects, ready to
-analyse. Here are the open ones, smallest first:
+analyse. Here are the open ones:
 
-
-``` r
+```{r}
+#| label: visium-candidates
 visium <- htan_files(
     assay == "10xVisiumSpatialTranscriptomics-RNA-seq", level == 4,
     access == "open-synapse", con = con)
@@ -80,49 +97,51 @@ visium |>
     count(HTAN_Center, extension) |>
     arrange(desc(n)) |>
     collect()
-#> # A tibble: 2 × 3
-#>   HTAN_Center     extension     n
-#>   <chr>           <chr>     <dbl>
-#> 1 HTAN WUSTL      .rds        132
-#> 2 HTAN Vanderbilt .h5ad        43
-visium |>
-    filter(extension == ".h5ad", n_participants == 1) |>
-    arrange(File_Size) |>
-    select(HTAN_Data_File_ID, Filename, File_Size) |>
-    head(5) |>
-    collect()
-#> # A tibble: 5 × 3
-#>   HTAN_Data_File_ID            Filename                                File_Size
-#>   <chr>                        <chr>                                       <dbl>
-#> 1 HTA11_7862_200000101134111   visium_level_4/8270_AS_1_unfiltered.h5…  13075894
-#> 2 HTA11_6134_200000101134111   visium_level_4/8270_AS_5_unfiltered.h5…  13437865
-#> 3 HTA11_10711_200000101134111  visium_level_4/8270_AS_2_unfiltered.h5…  13753214
-#> 4 HTA11_8622_200000102134111   visium_level_4/7319_AS_3_unfiltered.h5…  17443425
-#> 5 HTA11_99999974143_8462034111 visium_level_4/7003_AS_1_unfiltered.h5…  19035870
 ```
 
-Two things guide the choice. First, the format: `.h5ad` (AnnData) files
+Three things guide the choice. First, the format: `.h5ad` (AnnData) files
 follow a common layout that anndataR reads reliably, whereas `.rds` files
-hold whatever R object the center saved. Second, size and provenance: a
-file from a single participant, and small enough to download in seconds.
-The smallest single-participant `.h5ad` qualifies:
+hold whatever R object the center saved. Second, provenance: a file from a
+single participant, measured on a biospecimen whose tissue type and site
+are recorded, so the result can be read against them. Third, size: small
+enough to download in seconds. The biospecimen fields come from the
+`biospecimen` table, joined on the assayed biospecimen:
 
+```{r}
+#| label: candidates
+biospecimens <- htan_tbl("biospecimen", con) |>
+    select(HTAN_Assayed_Biospecimen_ID = HTAN_Biospecimen_ID,
+        Tumor_Tissue_Type, Site_of_Resection_or_Biopsy)
+candidates <- visium |>
+    filter(extension == ".h5ad", n_participants == 1) |>
+    inner_join(biospecimens, by = "HTAN_Assayed_Biospecimen_ID") |>
+    filter(Tumor_Tissue_Type != "Not Otherwise Specified",
+        Site_of_Resection_or_Biopsy != "Not Reported") |>
+    arrange(File_Size) |>
+    select(HTAN_Data_File_ID, Filename, File_Size, Tumor_Tissue_Type,
+        Site_of_Resection_or_Biopsy) |>
+    collect()
+nrow(candidates)
+candidates |>
+    transmute(file = basename(Filename), MB = round(File_Size / 1e6),
+        Tumor_Tissue_Type, site = Site_of_Resection_or_Biopsy) |>
+    head(10)
+```
 
-``` r
-visium_id <- "HTA11_7862_200000101134111"
+One property that matters is not in the metadata: the version of AnnData
+that wrote each file. Files written before AnnData 0.8 (released in 2022)
+use an older on-disk layout that anndataR does not read. Every file
+smaller than `7794_AS_3_unfiltered.h5ad` in this list is in that older
+layout (checked by opening each one), so this vignette uses
+`7794_AS_3`, the smallest file in the current layout:
+
+```{r}
+#| label: pick
+visium_id <- "HTA11_99999933430_8422134111"
+stopifnot(visium_id %in% candidates$HTAN_Data_File_ID)
 file <- htan_files(HTAN_Data_File_ID == visium_id, con = con) |> collect()
 glimpse(select(file, HTAN_Data_File_ID, Filename, File_Size, md5,
     entityId, HTAN_Participant_ID, HTAN_Assayed_Biospecimen_ID, access))
-#> Rows: 1
-#> Columns: 8
-#> $ HTAN_Data_File_ID           <chr> "HTA11_7862_200000101134111"
-#> $ Filename                    <chr> "visium_level_4/8270_AS_1_unfiltered.h5ad"
-#> $ File_Size                   <dbl> 13075894
-#> $ md5                         <chr> "dadd45c1853c1bc56eb546182b02ea4f"
-#> $ entityId                    <chr> "syn51133587"
-#> $ HTAN_Participant_ID         <chr> "HTA11_7862"
-#> $ HTAN_Assayed_Biospecimen_ID <chr> "HTA11_7862_2000001011"
-#> $ access                      <chr> "open-synapse"
 ```
 
 The `entityId` is its Synapse ID; `access` is `open-synapse`, so a token is
@@ -132,61 +151,47 @@ needed but no data access request.
 
 The assay table holds the processing details:
 
-
-``` r
-htan_tbl("10xvisium_spatialtranscriptomics_scRNAseq_level4_metadata",
-    con) |>
+```{r}
+#| label: workflow
+workflow <- htan_tbl(
+    "10xvisium_spatialtranscriptomics_scRNAseq_level4_metadata", con) |>
     filter(HTAN_Data_File_ID == visium_id) |>
     select(Workflow_Version, Visium_Workflow_Type,
         Visium_Workflow_Parameters_Description, Run_ID, Data_Release) |>
-    collect() |>
-    glimpse()
-#> Rows: 1
-#> Columns: 5
-#> $ Workflow_Version                       <chr> "spaceranger-1.3.0"
-#> $ Visium_Workflow_Type                   <chr> "Spaceranger 1.3.0"
-#> $ Visium_Workflow_Parameters_Description <chr> "transcriptome -- GRCh38-2020-A…
-#> $ Run_ID                                 <chr> "8270-AS"
-#> $ Data_Release                           <chr> "Release 5.0"
+    collect()
+glimpse(workflow)
 ```
 
-Space Ranger 1.3.0 against GRCh38-2020-A, with the human whole-transcriptome
-probe set, so this is the probe-based Visium chemistry. "Unfiltered" in the
-file name
-suggests it holds every spot on the capture area, not only those under
-tissue, which the analysis will need to handle.
+The file was made with Space Ranger against the GRCh38-2020-A reference,
+with the human whole-transcriptome probe set, so this is the probe-based
+Visium chemistry. The record disagrees with itself about the Space Ranger
+version (`Workflow_Version` is `r workflow$Workflow_Version`, but
+`Visium_Workflow_Type` says `r workflow$Visium_Workflow_Type`): these
+fields were filled in by hand at submission, and are worth reading
+sceptically. "Unfiltered" in the file name suggests it holds every spot
+on the capture area, not only those under tissue, which the analysis will
+need to handle.
 
 # Tracing lineage
 
 Before using a processed file, check what it was made from:
 
-
-``` r
+```{r}
+#| label: lineage
 lineage <- htan_lineage(visium_id, con = con) |>
     arrange(depth, related_file_id) |>
     collect()
 lineage |>
     transmute(depth, Component = sub("10xVisiumSpatialTranscriptomics-",
         "", Component), file = basename(Filename))
-#> # A tibble: 8 × 3
-#>   depth Component     file                                
-#>   <int> <chr>         <chr>                               
-#> 1    -3 RNA-seqLevel1 8270-AS-0001_S1_L005_R1_001.fastq.gz
-#> 2    -3 RNA-seqLevel1 8270-AS-0001_S1_L005_R2_001.fastq.gz
-#> 3    -2 RNA-seqLevel2 8270_AS_1_possorted_genome_bam.bam  
-#> 4    -1 RNA-seqLevel3 8270_AS_1_barcodes.tsv.gz           
-#> 5    -1 RNA-seqLevel3 8270_AS_1_features.tsv.gz           
-#> 6    -1 RNA-seqLevel3 8270_AS_1_matrix.mtx.gz             
-#> 7    -1 RNA-seqLevel3 8270_AS_1_tissue_positions_list.csv 
-#> 8     0 RNA-seqLevel4 8270_AS_1_unfiltered.h5ad
 ```
 
 FASTQ (Level 1, controlled), aligned BAM (Level 2, controlled), the Space
 Ranger output (Level 3, open) and this object (Level 4). All were measured
 on one biospecimen. Its record, and the participant's:
 
-
-``` r
+```{r}
+#| label: biospecimen
 biospecimen <- htan_tbl("biospecimen", con) |>
     filter(HTAN_Biospecimen_ID == !!file$HTAN_Assayed_Biospecimen_ID) |>
     select(HTAN_Biospecimen_ID, HTAN_Parent_ID, Acquisition_Method_Type,
@@ -194,55 +199,38 @@ biospecimen <- htan_tbl("biospecimen", con) |>
         Histologic_Morphology_Code) |>
     collect()
 glimpse(biospecimen)
-#> Rows: 1
-#> Columns: 7
-#> $ HTAN_Biospecimen_ID         <chr> "HTA11_7862_2000001011"
-#> $ HTAN_Parent_ID              <chr> "HTA11_7862"
-#> $ Acquisition_Method_Type     <chr> "Biopsy"
-#> $ Preservation_Method         <chr> "Fresh"
-#> $ Tumor_Tissue_Type           <chr> "Premalignant"
-#> $ Site_of_Resection_or_Biopsy <chr> "Sigmoid colon"
-#> $ Histologic_Morphology_Code  <chr> "M82110"
 
 htan_tbl("clinical_tier1_demographics", con) |>
     filter(HTAN_Participant_ID == !!file$HTAN_Participant_ID) |>
     select(HTAN_Participant_ID, Gender, Race, Vital_Status) |>
     collect()
-#> # A tibble: 1 × 4
-#>   HTAN_Participant_ID Gender Race                      Vital_Status
-#>   <chr>               <chr>  <chr>                     <chr>       
-#> 1 HTA11_7862          Male   black or african american Alive
+
+diagnosis <- htan_tbl("clinical_tier1_diagnosis", con) |>
+    filter(HTAN_Participant_ID == !!file$HTAN_Participant_ID) |>
+    select(Primary_Diagnosis, Morphology, Tissue_or_Organ_of_Origin,
+        Tumor_Grade) |>
+    collect()
+diagnosis
 ```
 
-The section is a fresh biopsy of a premalignant lesion of the sigmoid
-colon, with morphology code `M82110`: ICD-O-3 8211/0, tubular adenoma. The
-participant's diagnosis record is "Not Reported" throughout (see the
-[data model vignette](data-model.html#a-visium-spatial-transcriptomics-object-back-to-the-patient)),
-so the histology comes from the biospecimen. The participant has other
-data too, which could extend this analysis later:
+The section is a `r tolower(biospecimen$Acquisition_Method_Type)` of the
+`r tolower(biospecimen$Site_of_Resection_or_Biopsy)`, with tissue type
+"`r biospecimen$Tumor_Tissue_Type`", HTAN's term for tissue from a primary
+tumour (as opposed to premalignant, normal or metastatic tissue). Nothing
+more specific is recorded: the morphology code is
+`r biospecimen$Histologic_Morphology_Code` (not reported), and the
+participant's primary diagnosis is "`r diagnosis$Primary_Diagnosis`".
+So the metadata do not say whether the lesion is an adenoma or a
+carcinoma, or of what type; the analysis has to be read without that.
+The participant has other data too, which could extend this analysis
+later:
 
-
-``` r
+```{r}
+#| label: other-data
 htan_files(participants = file$HTAN_Participant_ID, con = con) |>
     count(Component, access) |>
     arrange(Component) |>
     collect()
-#> # A tibble: 13 × 3
-#>    Component                                      access           n
-#>    <chr>                                          <chr>        <dbl>
-#>  1 10xVisiumSpatialTranscriptomics-AuxiliaryFiles open-synapse     1
-#>  2 10xVisiumSpatialTranscriptomics-RNA-seqLevel1  controlled       2
-#>  3 10xVisiumSpatialTranscriptomics-RNA-seqLevel2  controlled       1
-#>  4 10xVisiumSpatialTranscriptomics-RNA-seqLevel3  open-synapse     4
-#>  5 10xVisiumSpatialTranscriptomics-RNA-seqLevel4  open-synapse     1
-#>  6 BulkWESLevel1                                  controlled       4
-#>  7 BulkWESLevel2                                  controlled       2
-#>  8 BulkWESLevel3                                  open-synapse     1
-#>  9 ImagingLevel2                                  open-synapse     3
-#> 10 ScRNA-seqLevel1                                controlled       6
-#> 11 ScRNA-seqLevel2                                controlled       3
-#> 12 ScRNA-seqLevel3                                open-synapse     3
-#> 13 ScRNA-seqLevel4                                open-synapse     4
 ```
 
 # Downloading
@@ -252,8 +240,9 @@ a short-lived download URL, fetches the file, and verifies its md5 against
 the metadata. A second call finds the verified copy and does not download
 again.
 
-
-``` r
+```{r}
+#| label: download
+#| eval: !expr have_token
 dest <- file.path(tempdir(), "htan-data")
 dl <- htan_download(file, dest = dest, con = con)
 dl
@@ -265,8 +254,9 @@ dl
 has a `spatial` embedding (the layout scanpy writes for Visium), the result
 is a `SpatialExperiment` with the spot positions as `spatialCoords()`:
 
-
-``` r
+```{r}
+#| label: read
+#| eval: !expr have_token
 spe <- read_htan(dl)
 spe
 ```
@@ -275,8 +265,9 @@ Level 4 objects differ between centers, so look before you compute. Three
 things matter here: which assay holds raw counts, whether there are spot
 coordinates, and which spots are under tissue.
 
-
-``` r
+```{r}
+#| label: inspect
+#| eval: !expr have_token
 assayNames(spe)
 names(colData(spe))
 names(rowData(spe))
@@ -286,24 +277,29 @@ is(spe, "SpatialExperiment")
 
 Marker genes are easier to read as symbols. If the row names are Ensembl
 IDs, use a symbol column from `rowData()` instead (scanpy and Space Ranger
-call it different things), keeping names unique:
+call it different things), keeping names unique. Some probe-set features
+are named `DEPRECATED_` followed by an Ensembl ID; they are counted here
+and left as they are.
 
-
-``` r
+```{r}
+#| label: symbols
+#| eval: !expr have_token
 if (mean(grepl("^ENSG", rownames(spe))) > 0.5) {
     symbol_col <- intersect(c("gene_symbols", "gene_name", "feature_name",
         "symbol", "gene_ids"), names(rowData(spe)))[1]
     rownames(spe) <- make.unique(as.character(rowData(spe)[[symbol_col]]))
 }
 head(rownames(spe))
+sum(grepl("^DEPRECATED_", rownames(spe)))
 ```
 
 anndataR maps AnnData's main matrix `X` to an assay named `X`. Whether `X`
 is raw counts or normalised values is the center's choice, so test it: raw
 counts are whole numbers.
 
-
-``` r
+```{r}
+#| label: counts
+#| eval: !expr have_token
 x <- assay(spe, "X")
 sample_values <- as.numeric(x[, seq_len(min(200, ncol(x)))])
 all(sample_values == round(sample_values))
@@ -316,17 +312,21 @@ AnnData object or from the Level 3 Space Ranger matrix listed in the
 lineage.
 
 If the object had no spatial embedding, the spot positions are in the
-Level 3 `tissue_positions_list.csv` from the lineage table, which can be
+Level 3 `tissue_positions.csv` from the lineage table, which can be
 downloaded and joined by barcode. This chunk does that only when needed:
 
-
-``` r
+```{r}
+#| label: coordinates
+#| eval: !expr have_token
 if (!is(spe, "SpatialExperiment")) {
     pos_id <- lineage$related_file_id[
         grepl("tissue_positions", lineage$Filename)]
     pos_dl <- htan_download(pos_id, dest = dest, con = con)
-    pos <- read.csv(pos_dl$path, header = FALSE, col.names = c("barcode",
-        "in_tissue", "array_row", "array_col", "pxl_row", "pxl_col"))
+    ## Space Ranger 2.0 writes a header row; 1.x did not.
+    has_header <- startsWith(readLines(pos_dl$path, n = 1), "barcode")
+    pos <- read.csv(pos_dl$path, header = has_header)
+    names(pos) <- c("barcode", "in_tissue", "array_row", "array_col",
+        "pxl_row", "pxl_col")
     pos <- pos[match(colnames(spe), pos$barcode), ]
     colData(spe)$in_tissue <- pos$in_tissue
     spe <- as(spe, "SpatialExperiment")
@@ -338,8 +338,9 @@ dim(spatialCoords(spe))
 Finally, keep only spots under tissue. Spots outside the tissue capture
 ambient RNA and would form their own spurious cluster:
 
-
-``` r
+```{r}
+#| label: in-tissue
+#| eval: !expr have_token
 if ("in_tissue" %in% names(colData(spe))) {
     print(table(in_tissue = spe$in_tissue))
     spe <- spe[, spe$in_tissue == 1]
@@ -356,8 +357,9 @@ and fills `colData` with the participant's demographics and diagnosis.
 Biospecimen annotation is per sample rather than per participant, so it is
 added to the spots' own `colData` first:
 
-
-``` r
+```{r}
+#| label: mae
+#| eval: !expr have_token
 for (field in c("HTAN_Biospecimen_ID", "Tumor_Tissue_Type",
     "Site_of_Resection_or_Biopsy", "Histologic_Morphology_Code")) {
     colData(spe)[[field]] <- biospecimen[[field]]
@@ -378,8 +380,9 @@ file pooled from several participants, `htan_experiment()` needs the
 
 The analysis below works on the `SpatialExperiment` itself:
 
-
-``` r
+```{r}
+#| label: get-experiment
+#| eval: !expr have_token
 spe <- MultiAssayExperiment::experiments(mae)[[1]]
 ```
 
@@ -399,26 +402,37 @@ function ending in `.se` takes a `SummarizedExperiment` (here the
 
 ## Quality control
 
-Per-spot metrics: total counts (library size), the number of genes
-detected, and the share of counts from mitochondrial genes, which rises in
-damaged tissue.
+Per-spot metrics: total counts (library size) and the number of genes
+detected. In most RNA data a third metric is the share of counts from the
+mitochondrially encoded genes (`MT-` genes), which rises in damaged
+cells. A probe-based assay only measures the genes its panel targets,
+unlike poly(A) capture, which picks up whatever transcripts are present,
+and the panel used for this section has no probes for the `MT-` genes. So
+the code looks for them, and adds the mitochondrial share only if there
+are any. (Genes such as `MTRNR2L12` are nuclear, despite the name, and the
+`^MT-` pattern rightly skips them.)
 
-
-``` r
+```{r}
+#| label: qc
+#| eval: !expr have_token
 is_mito <- grepl("^MT-", rownames(spe), ignore.case = TRUE)
 sum(is_mito)
-spe <- quickRnaQc.se(spe, subsets = list(mito = is_mito))
+qc_subsets <- if (any(is_mito)) list(mito = is_mito) else list()
+spe <- quickRnaQc.se(spe, subsets = qc_subsets)
 summary(spe$sum)
 summary(spe$detected)
-summary(spe$subset.proportion.mito)
+if (any(is_mito)) summary(spe$subset.proportion.mito)
 ```
 
 Plotting the metrics on the tissue (image row coordinates increase
 downwards, hence the reversed y axis) shows whether low-quality spots are
 scattered (technical) or form a region (biological):
 
-
-``` r
+```{r}
+#| label: fig-qc
+#| eval: !expr have_token
+#| fig-height: 4
+#| fig-cap: "Library size of each spot under tissue."
 spot_coords <- function(spe) {
     xy <- as.data.frame(spatialCoords(spe))
     names(xy) <- c("x", "y")
@@ -441,26 +455,28 @@ Spots are flagged as outliers by median absolute deviations (MADs) from
 the median, instead of fixed thresholds, because sensible thresholds depend
 on the tissue, the probe panel and sequencing depth. `quickRnaQc.se()`
 has already done this: it set each threshold three MADs from the median,
-testing library size and detected genes on the low side only and the
-mitochondrial share on the high side, and stored the verdict in `keep`.
-The thresholds are kept in the object's metadata:
+testing library size and detected genes on the low side only (and the
+mitochondrial share, when there is one, on the high side), and stored the
+verdict in `keep`. The thresholds are kept in the object's metadata:
 
-
-``` r
+```{r}
+#| label: qc-filter
+#| eval: !expr have_token
 thresholds <- metadata(spe)$qc$thresholds
 unlist(thresholds)
+n_before <- ncol(spe)
+n_discard <- sum(!spe$keep)
 c(low_sum = sum(spe$sum < thresholds$sum),
     low_detected = sum(spe$detected < thresholds$detected),
-    high_mito = sum(spe$subset.proportion.mito >
-        thresholds$subset.proportion[["mito"]]),
-    discard = sum(!spe$keep))
+    discard = n_discard)
 spe <- spe[, spe$keep]
 dim(spe)
 ```
 
-A polyp biopsy is small and mostly epithelium, so few spots should fail. A
-large discarded fraction, or discarded spots forming a region, would call
-for a closer look before dropping them.
+A large discarded fraction, or discarded spots forming a region, would
+call for a closer look before dropping them`r result(paste0("; here ",
+fmt(n_discard), " of the ", fmt(n_before), " spots ",
+if (n_discard == 1) "is" else "are", " discarded"))`.
 
 ## Normalisation
 
@@ -473,8 +489,9 @@ less safe for spots that mix several cells of different types.
 `normalizeRnaCounts.se()` uses the library sizes as size factors by
 default, scaled to average 1, and adds the `logcounts` assay.
 
-
-``` r
+```{r}
+#| label: normalise
+#| eval: !expr have_token
 spe <- normalizeRnaCounts.se(spe)
 summary(spe$sizeFactor)
 ```
@@ -484,28 +501,36 @@ summary(spe$sizeFactor)
 Highly variable genes carry the structure; the rest add noise. The variance
 of each gene's log-expression is modelled against its mean, and the 2,000
 genes with the largest residual above that trend are marked in
-`rowData(spe)$hvg`. Mitochondrial genes are then removed from the set so
-that tissue damage does not drive the clustering.
+`rowData(spe)$hvg`. Where there are mitochondrial genes, they are then
+removed from the set so that tissue damage does not drive the clustering;
+this panel has none, so here the step does nothing.
 
-
-``` r
+```{r}
+#| label: hvgs
+#| eval: !expr have_token
 spe <- chooseRnaHvgs.se(spe, top = 2000)
-rowData(spe)$hvg <- rowData(spe)$hvg & !is_mito
+if (any(is_mito)) {
+    rowData(spe)$hvg <- rowData(spe)$hvg & !is_mito
+}
 sum(rowData(spe)$hvg)
 hvg_stats <- rowData(spe)[rowData(spe)$hvg, ]
 head(rownames(hvg_stats)[order(hvg_stats$residuals, decreasing = TRUE)], 20)
 ```
 
-
-``` r
+```{r}
+#| label: pca
+#| eval: !expr have_token
 spe <- runPca.se(spe, features = rowData(spe)$hvg, number = 30)
 pca <- metadata(spe)$PCA
 percent_var <- 100 * pca$variance.explained / pca$total.variance
 round(head(percent_var, 10), 1)
 ```
 
-The first components explain most of the variance; 30 are kept, a common
-default that is generous for a tissue with a handful of domains.
+Thirty components are kept, a common default that is generous for a
+tissue with a handful of domains. No single component explains much of
+the variance`r result(paste0(" (the first ", round(percent_var[1], 1),
+"%, the second ", round(percent_var[2], 1), "%)"))`, which is usual for
+spots that each average several cells.
 
 ## Clustering
 
@@ -518,22 +543,29 @@ reflect real tissue structure. Spatially aware methods (for example
 BayesSpace or Banksy) smooth over neighbours and would give cleaner
 domains, at the cost of that independent check.
 
-
-``` r
+```{r}
+#| label: cluster
+#| eval: !expr have_token
 spe <- clusterGraph.se(spe, method = "leiden", resolution = 0.5,
     more.build.args = list(weight.scheme = "jaccard"),
     output.name = "cluster")
 table(spe$cluster)
 ```
 
-
-``` r
+```{r}
+#| label: fig-clusters
+#| eval: !expr have_token
+#| fig-height: 4.5
+#| fig-cap: "Expression clusters on the tissue section."
 spot_plot(spe, spe$cluster, "Cluster") +
     guides(colour = guide_legend(override.aes = list(size = 3)))
 ```
 
-
-``` r
+```{r}
+#| label: fig-umap
+#| eval: !expr have_token
+#| fig-height: 4
+#| fig-cap: "UMAP of spots, coloured by cluster."
 spe <- runUmap.se(spe)
 plotReducedDim(spe, "UMAP", colour_by = "cluster")
 ```
@@ -551,69 +583,159 @@ are a better summary than p-values here: the clusters were defined from
 these same expression values, so a test for differences between them is
 circular and its p-values would not mean what they usually do.
 
-
-``` r
+```{r}
+#| label: markers
+#| eval: !expr have_token
 markers <- scoreMarkers.se(spe, groups = spe$cluster)
 top_markers <- vapply(markers, function(m) {
     paste(head(rownames(m), 8), collapse = ", ")
 }, "")
 tibble::tibble(cluster = names(top_markers), top_markers = top_markers)
-previewMarkers(markers[[1]], rows = 8, columns = c("mean", "detected",
+```
+
+Some clusters are led by members of multi-copy gene families, such as
+`SERF1A` and `SERF1B`, `FAM153B`, the `USP17L` genes and `MTRNR2L12`,
+rather than by genes that mark a cell type. Each of these families has
+several near-identical copies in the genome, so a probe, or a read, may
+not be specific to one of them; the `MTRNR2L` genes are also close copies
+of the mitochondrial rRNA gene `MT-RNR2`. Their signal may therefore be
+partly technical (this is unverified). A per-cluster summary makes the
+pattern easier to see: the number of spots, their median depth, the
+median share of each spot's counts that goes to these families, and the
+mean log-expression of an epithelial and a stromal marker.
+
+```{r}
+#| label: cluster-summary
+#| eval: !expr have_token
+multicopy <- grepl("^(SERF1|USP17L|FAM153|MTRNR2L|TAF11L|GAGE|CT45A)",
+    rownames(spe))
+sum(multicopy)
+clusters <- factor(spe$cluster)
+per_cluster <- function(v, f = median) as.vector(tapply(v, clusters, f))
+cluster_summary <- tibble::tibble(
+    cluster = levels(clusters),
+    spots = per_cluster(spe$sum, length),
+    median_counts = per_cluster(spe$sum),
+    median_genes = per_cluster(spe$detected),
+    multicopy_share = round(per_cluster(
+        colSums(counts(spe)[multicopy, ]) / spe$sum), 2),
+    EPCAM = round(per_cluster(logcounts(spe)["EPCAM", ], mean), 2),
+    COL1A1 = round(per_cluster(logcounts(spe)["COL1A1", ], mean), 2)
+)
+cluster_summary
+epi <- cluster_summary$cluster[which.max(cluster_summary$EPCAM)]
+stroma <- cluster_summary$cluster[which.max(cluster_summary$COL1A1)]
+shallow <- cluster_summary$cluster[which.min(cluster_summary$median_counts)]
+deepest <- cluster_summary$cluster[which.max(cluster_summary$median_counts)]
+```
+
+The top of the ranking for the most epithelial cluster (highest mean
+`EPCAM`) shows the statistics behind it: mean log-expression and detected
+proportion in the cluster, then the mean Cohen's d and AUC against the
+other clusters.
+
+```{r}
+#| label: markers-epithelial
+#| eval: !expr have_token
+previewMarkers(markers[[epi]], rows = 8, columns = c("mean", "detected",
     d = "cohens.d.mean", auc = "auc.mean"))
 ```
 
-The last table is the top of cluster 1's ranking: mean log-expression
-and detected proportion in the cluster, then the mean Cohen's d and AUC
-against the other clusters.
-
 Known markers of the colonic mucosa make the interpretation concrete:
-`EPCAM` and `CEACAM5` for epithelium, `MUC2` for goblet cells, `LGR5` and
-`OLFM4` for crypt-base stem cells (expanded in adenomas), `COL1A1` and
-`VIM` for stroma, and `PTPRC` for immune cells.
+`EPCAM` for epithelium, `MUC2` for goblet cells and their mucin, `CA1` for
+the absorptive colonocytes that line normal colonic epithelium, `COL1A1`
+for stroma and `PTPRC` for immune cells. `SERF1A` stands in for the
+multi-copy families. Their expression levels differ widely, so each gene
+is coloured relative to its own maximum:
 
-
-``` r
-genes <- intersect(c("EPCAM", "MUC2", "OLFM4", "LGR5", "COL1A1", "PTPRC"),
+```{r}
+#| label: fig-genes
+#| eval: !expr have_token
+#| fig-height: 6
+#| fig-width: 8
+#| fig-cap: "Marker genes on the tissue, each relative to its maximum."
+genes <- intersect(c("EPCAM", "MUC2", "CA1", "COL1A1", "PTPRC", "SERF1A"),
     rownames(spe))
 long <- do.call(rbind, lapply(genes, function(g) {
-    cbind(spot_coords(spe), gene = g, logcounts = logcounts(spe)[g, ])
+    v <- logcounts(spe)[g, ]
+    cbind(spot_coords(spe), gene = g, relative = v / max(v))
 }))
-ggplot(long, aes(x, y, colour = logcounts)) +
+ggplot(long, aes(x, y, colour = relative)) +
     geom_point(size = 0.6) +
-    scale_colour_viridis_c() +
+    scale_colour_viridis_c(labels = scales::percent) +
     scale_y_reverse() +
     coord_fixed() +
     facet_wrap(~ gene) +
-    labs(x = NULL, y = NULL) +
+    labs(x = NULL, y = NULL, colour = "Share of\nmaximum") +
     theme_void()
 ```
 
-
-``` r
+```{r}
+#| label: fig-cluster-genes
+#| eval: !expr have_token
+#| fig-height: 4
+#| fig-cap: "Marker expression by cluster."
 plotDots(spe, features = genes, group = "cluster")
 ```
 
+```{r}
+#| label: interpretation
+#| eval: !expr have_token
+#| include: false
+detected_in <- function(g) mean(counts(spe)[g, ] > 0)
+colonocyte <- intersect(c("CA1", "FABP1", "SLC26A3", "AQP8"), rownames(spe))
+colonocyte_max <- max(vapply(colonocyte, detected_in, 0))
+cluster_n <- function(k) paste("cluster", k)
+top_genes <- function(k, n = 6) code_list(head(rownames(markers[[k]]), n))
+share <- function(k) {
+    pct(cluster_summary$multicopy_share[cluster_summary$cluster == k])
+}
+```
 
+Read together, the plots and the summary suggest three kinds of spot.
 
-Read the plots together: a cluster high in `EPCAM` and `CEACAM5` (here
-cluster <pending>) is epithelium; within the
-epithelium, `OLFM4` and `LGR5` mark the proliferative, stem-like compartment
-that expands in adenomas, and `MUC2` the differentiated goblet cells. Stroma
-(`COL1A1`, `VIM`) and immune cells (`PTPRC`) lie between and beneath the
-crypts. Whether the adenomatous epithelium separates from normal-looking
-epithelium in this section is the kind of question to pursue next, with
-the H&E image (an auxiliary file in the lineage) for reference.
+- **Epithelium.** The cluster with the highest `EPCAM`
+  `r result(paste0("(", cluster_n(epi), ") "))`has epithelial and
+  secretory genes among its top markers`r result(paste0(" (",
+  top_genes(epi, 8), ")", if (epi == deepest) ", and the deepest spots"))`.
+- **Stroma.** The cluster with the highest `COL1A1`
+  `r result(paste0("(", cluster_n(stroma), ") "))`is led by collagens and
+  other stromal and extracellular-matrix genes`r result(paste0(" (",
+  top_genes(stroma), ")"))`.
+- **Shallow spots.** The cluster with the fewest counts per spot
+  `r result(paste0("(", cluster_n(shallow), ") "))`is led by the multi-copy
+  families`r result(paste0(" (", top_genes(shallow), ")"))`, which take
+  `r result(share(shallow), "a large share")` of a typical spot's counts
+  there. It lies along the edges of the section, where the library-size
+  map is darkest, and may reflect capture depth more than a cell type.
+
+The section as a whole does not look like normal colonic mucosa. `MUC2`
+is detected throughout`r result(paste0(" (in ",
+pct(detected_in("MUC2")), " of spots)"))`, while the markers of absorptive
+colonocytes (`r code_list(c("CA1", "FABP1", "SLC26A3", "AQP8"))`) are
+almost absent`r result(paste0(" (each detected in at most ",
+pct(colonocyte_max), " of spots)"))`, and so is the immune marker
+`PTPRC``r result(paste0(" (", pct(detected_in("PTPRC")), ")"))`. That
+would fit a mucin-rich lesion, but the histology is not recorded, so it
+remains a hypothesis: the H&E image of the section (an auxiliary file of a
+few gigabytes) is the place to check it.
+
+So the expression clusters do form regions on the tissue, which suggests
+real structure, but here they separate spots by depth and by a few gene
+families as well as by tissue compartment. Two next steps would sharpen
+them: drop the multi-copy families from the highly variable genes and
+recluster, and compare the regions with the H&E image.
 
 # Where to go from here
 
-- **More sections.** Other Vanderbilt Visium files cover more polyps
-  (`visium` above). Read several, give each its file ID, and combine them
-  in one `MultiAssayExperiment`; integrate them with batch correction
-  (for example scrapper's `correctMnn.se()`) before joint clustering.
+- **More sections.** Other Vanderbilt Visium files cover more colon
+  lesions (`candidates` above). Read several, give each its file ID, and
+  combine them in one `MultiAssayExperiment`; integrate them with batch
+  correction (for example scrapper's `correctMnn.se()`) before joint
+  clustering.
 - **Single-cell reference.** The participant also has single-cell
-  RNA-seq (Level 3 count matrices for the polyp and for normal colon, and
-  Vanderbilt's merged Level 4 objects). Cell types from those can be used
-  to deconvolve the spots (for example with
+  RNA-seq (Level 3 count matrices). Cell types from those can be used to
+  deconvolve the spots (for example with
   [SPOTlight](https://bioconductor.org/packages/release/bioc/html/SPOTlight.html)).
 - **Spatial domains and statistics.**
   [BayesSpace](https://bioconductor.org/packages/release/bioc/html/BayesSpace.html)
@@ -630,83 +752,18 @@ the H&E image (an auxiliary file in the lineage) for reference.
 The metadata release is pinned (`htan_con("r7")`), the file is identified
 by its HTAN ID and checked against its md5, and the random steps (PCA,
 clustering, UMAP) use scrapper's fixed default seeds, so they give the
-same result on every run without `set.seed()`.
-The software versions are below. What is not pinned is the file's content
+same result on every run without `set.seed()`, for a given platform and
+set of package versions. Across versions and platforms the details can
+change: builds of this vignette with different scrapper releases and
+numerical libraries have given five or six clusters. That is why every
+result quoted in the text above is computed from the output rather than
+written in by hand. The software versions are below. What is not pinned is the file's content
 on Synapse: if the center replaced it, the md5 check would fail rather than
 silently give a different result.
 
 # Session information
 
-
-``` r
+```{r}
+#| label: session-info
 sessionInfo()
-#> R version 4.6.0 (2026-04-24)
-#> Platform: aarch64-apple-darwin23
-#> Running under: macOS Tahoe 26.7.1
-#> 
-#> Matrix products: default
-#> BLAS:   /Library/Frameworks/R.framework/Versions/4.6/Resources/lib/libRblas.0.dylib 
-#> LAPACK: /Library/Frameworks/R.framework/Versions/4.6/Resources/lib/libRlapack.dylib;  LAPACK version 3.12.1
-#> 
-#> locale:
-#> [1] en_US.UTF-8/en_US.UTF-8/en_US.UTF-8/C/en_US.UTF-8/en_US.UTF-8
-#> 
-#> time zone: America/New_York
-#> tzcode source: internal
-#> 
-#> attached base packages:
-#> [1] stats4    stats     graphics  grDevices utils     datasets  methods  
-#> [8] base     
-#> 
-#> other attached packages:
-#>  [1] dplyr_1.2.1                 scrapper_1.7.4             
-#>  [3] scater_1.41.2               ggplot2_4.0.3              
-#>  [5] scuttle_1.23.1              SpatialExperiment_1.23.0   
-#>  [7] SingleCellExperiment_1.35.2 SummarizedExperiment_1.43.0
-#>  [9] Biobase_2.73.2              GenomicRanges_1.65.1       
-#> [11] Seqinfo_1.3.0               IRanges_2.47.2             
-#> [13] S4Vectors_0.51.6            BiocGenerics_0.59.12       
-#> [15] generics_0.1.4              MatrixGenerics_1.25.0      
-#> [17] matrixStats_1.5.0           HTAN_0.99.0                
-#> [19] knitr_1.51                 
-#> 
-#> loaded via a namespace (and not attached):
-#>  [1] tidyselect_1.2.1            viridisLite_0.4.3          
-#>  [3] vipor_0.4.7                 farver_2.1.2               
-#>  [5] blob_1.3.0                  viridis_0.6.5              
-#>  [7] filelock_1.0.3              S7_0.2.2                   
-#>  [9] fastmap_1.2.0               BiocFileCache_3.2.0        
-#> [11] duckdb_1.5.5                rsvd_1.0.5                 
-#> [13] lifecycle_1.0.5             RSQLite_3.53.3             
-#> [15] magrittr_2.0.5              compiler_4.6.0             
-#> [17] rlang_1.3.0                 tools_4.6.0                
-#> [19] utf8_1.2.6                  yaml_2.3.12                
-#> [21] S4Arrays_1.13.0             bit_4.6.0                  
-#> [23] pkgbuild_1.4.8              curl_7.1.0                 
-#> [25] DelayedArray_0.39.4         RColorBrewer_1.1-3         
-#> [27] pkgload_1.5.3               abind_1.4-8                
-#> [29] BiocParallel_1.46.0         purrr_1.2.2                
-#> [31] withr_3.0.3                 desc_1.4.3                 
-#> [33] grid_4.6.0                  beachmat_2.29.0            
-#> [35] scales_1.4.0                MultiAssayExperiment_1.39.0
-#> [37] cli_3.6.6                   otel_0.2.0                 
-#> [39] rjson_0.2.23                ggbeeswarm_0.7.3           
-#> [41] DBI_1.3.0                   cachem_1.1.0               
-#> [43] parallel_4.6.0              BiocManager_1.30.27        
-#> [45] XVector_0.53.0              vctrs_0.7.3                
-#> [47] Matrix_1.7-6                jsonlite_2.0.0             
-#> [49] BiocSingular_1.28.0         BiocNeighbors_2.7.2        
-#> [51] ggrepel_0.9.8               bit64_4.8.2                
-#> [53] beeswarm_0.4.0              irlba_2.3.7                
-#> [55] magick_2.9.1                testthat_3.3.2             
-#> [57] glue_1.8.1                  codetools_0.2-20           
-#> [59] gtable_0.3.6                ScaledMatrix_1.21.0        
-#> [61] tibble_3.3.1                pillar_1.11.1              
-#> [63] brio_1.1.5                  R6_2.6.1                   
-#> [65] dbplyr_2.6.0                httr2_1.3.0                
-#> [67] rprojroot_2.1.1             evaluate_1.0.5             
-#> [69] lattice_0.22-9              memoise_2.0.1              
-#> [71] Rcpp_1.1.2                  gridExtra_2.3.1            
-#> [73] SparseArray_1.12.2          xfun_0.60                  
-#> [75] pkgconfig_2.0.3
 ```

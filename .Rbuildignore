@@ -27,8 +27,6 @@
 ^inst/scripts/build_snapshot/uv\.lock$
 ^\.venv-snapshot$
 ^inst/scripts/build_snapshot/\.mypy_cache$
-^dev$
-^vignettes/.*\.qmd\.orig$
 ^vignettes/\.quarto$
 ^\.git$
 ^\.env$

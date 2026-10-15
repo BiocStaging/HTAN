@@ -29,13 +29,19 @@ HTAN Phase 1 anonymously.
 
 ## Install
 
-HTAN is in early development and not yet on Bioconductor. Install it from
-GitHub:
+HTAN is not yet on Bioconductor. Until it is, install the development
+version from GitHub:
 
 ```r
 if (!requireNamespace("BiocManager", quietly = TRUE))
     install.packages("BiocManager")
 BiocManager::install("seandavi/HTAN")
+```
+
+Once the package is accepted, install it from Bioconductor instead:
+
+```r
+BiocManager::install("HTAN")
 ```
 
 ## Quick start

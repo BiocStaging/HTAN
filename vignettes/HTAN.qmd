@@ -1,17 +1,66 @@
 ---
 title: "Introduction to HTAN"
 author: "Sean Davis"
+date: today
 format:
   html:
     toc: true
     toc-depth: 3
+    fig-width: 7
+    fig-height: 4.5
+knitr:
+  opts_chunk:
+    comment: "#>"
+    collapse: true
+    message: false
+    fig.retina: 1
 vignette: >
   %\VignetteIndexEntry{Introduction to HTAN}
   %\VignetteEngine{quarto::html}
   %\VignetteEncoding{UTF-8}
 ---
 
+```{r}
+#| label: setup
+#| include: false
+library(HTAN)
+library(dplyr)
+fmt <- function(x) format(x, big.mark = ",", scientific = FALSE)
+```
 
+Package: [*HTAN*](https://bioconductor.org/packages/HTAN)
+`r packageVersion("HTAN")`
+([source](https://github.com/seandavi/HTAN)).
+
+# Introduction
+
+The Human Tumor Atlas Network (HTAN) has released single-cell, spatial,
+imaging and bulk data from thousands of biospecimens, with detailed
+clinical and biospecimen annotation, but finding the right file, tracing what it was
+made from and getting it into an analysis takes several systems, each
+with its own interface. *HTAN* puts those steps in R: it queries HTAN's
+open-access metadata locally, follows the provenance links between
+files, downloads open files, and reads them into Bioconductor classes
+ready for analysis.
+
+Other ways to reach HTAN data, and how this package relates to them:
+
+- The [HTAN Data Portal](https://humantumoratlas.org/explore) is the place
+  to browse and search interactively. It exports file manifests, but it is
+  not a programming interface to the metadata.
+- [ISB-CGC](https://isb-cgc.org/) publishes every release's
+  metadata as Google BigQuery tables, queried in SQL (from R, with
+  bigrquery). That needs a Google Cloud account and a billing project.
+  *HTAN* reads a parquet snapshot of the same tables, with no account,
+  and works offline once it is cached.
+- Synapse's own clients download a file by its Synapse ID but know
+  nothing of HTAN's data model. *HTAN* finds the file from the metadata,
+  then downloads it from Synapse or the CRDC General Commons and checks
+  its md5.
+- [GenomicDataCommons](https://bioconductor.org/packages/GenomicDataCommons)
+  is the Bioconductor client for NCI's Genomic Data Commons, with a
+  similar query-then-download design. HTAN's data are not in the GDC,
+  so it does not reach them.
 
 This vignette introduces the Human Tumor Atlas Network (HTAN) and the
 *HTAN* package. It covers what the program is, how its data are organised and
@@ -28,26 +77,38 @@ short tour of the package. Three companion vignettes go further:
   dataset, from a metadata query to a spatial transcriptomics analysis in
   Bioconductor.
 
-The output in these vignettes was computed ahead of time from the real HTAN
-Release 7 metadata (see [How these vignettes are built](#how-these-vignettes-are-built)).
+The code in these vignettes runs against the real HTAN Release 7 metadata
+each time they are built (see [How these vignettes are built](#how-these-vignettes-are-built)).
 
-# Getting started
+# Installation
 
-Install the package from GitHub with BiocManager:
+Install the package from Bioconductor with BiocManager:
 
-
-``` r
+```{r}
+#| label: install
+#| eval: false
 if (!requireNamespace("BiocManager", quietly = TRUE)) {
     install.packages("BiocManager")
 }
+BiocManager::install("HTAN")
+```
+
+To install the development version from GitHub instead, for example
+before the package is available from Bioconductor:
+
+```{r}
+#| label: install-github
+#| eval: false
 BiocManager::install("seandavi/HTAN")
 ```
 
-Load it, together with dplyr, which is the query language for everything
+# Getting started
+
+Load the package, together with dplyr, which is the query language for everything
 that follows:
 
-
-``` r
+```{r}
+#| label: load
 library(HTAN)
 library(dplyr)
 ```
@@ -57,41 +118,26 @@ downloads about 20 MB of parquet files from Hugging Face, checks each one
 against its sha256 checksum and caches it; later calls read from the cache.
 No account is needed.
 
-
-``` r
+```{r}
+#| label: con
 con <- htan_con("r7")
 ```
 
 Find files. `htan_files()` returns one row per HTAN data file, as a lazy
 table that runs in DuckDB until you call `collect()`:
 
-
-``` r
+```{r}
+#| label: first-query
 htan_files(assay == "ScRNA-seq", level == 4, con = con) |>
     count(HTAN_Center, extension) |>
     arrange(desc(n)) |>
     collect()
-#> # A tibble: 12 × 3
-#>    HTAN_Center     extension     n
-#>    <chr>           <chr>     <dbl>
-#>  1 HTAN WUSTL      .rds        237
-#>  2 HTAN CHOP       .rds        197
-#>  3 HTAN MSK        .csv        191
-#>  4 HTAN MSK        .txt         76
-#>  5 HTAN DFCI       .h5ad        48
-#>  6 HTAN HTAPP      .tsv         47
-#>  7 HTAN BU         .csv         32
-#>  8 HTAN MSK        .h5ad        15
-#>  9 HTAN CHOP       .tsv          6
-#> 10 HTAN Vanderbilt .h5ad         6
-#> 11 HTAN CHOP       .h5ad         1
-#> 12 HTAN Duke       .rds          1
 ```
 
 Trace a processed file back to the raw files and biospecimen it came from:
 
-
-``` r
+```{r}
+#| label: first-lineage
 htan_files(assay == "ScRNA-seq", level == 4, participants = "HTA12_251",
     con = con) |>
     head(1) |>
@@ -99,22 +145,6 @@ htan_files(assay == "ScRNA-seq", level == 4, participants = "HTA12_251",
     select(related_file_id, depth, Component, HTAN_Assayed_Biospecimen_ID) |>
     arrange(depth) |>
     collect()
-#> # A tibble: 13 × 4
-#>    related_file_id depth Component        HTAN_Assayed_Biospecimen_ID
-#>    <chr>           <int> <chr>            <chr>                      
-#>  1 HTA12_251_1000     -3 ScRNA-seqLevel1  HTA12_251_3                
-#>  2 HTA12_251_1014     -3 ScATAC-seqLevel1 HTA12_251_3                
-#>  3 HTA12_251_1002     -3 ScRNA-seqLevel1  HTA12_251_3                
-#>  4 HTA12_251_1003     -3 ScRNA-seqLevel1  HTA12_251_3                
-#>  5 HTA12_251_1013     -3 ScATAC-seqLevel1 HTA12_251_3                
-#>  6 HTA12_251_1015     -3 ScATAC-seqLevel1 HTA12_251_3                
-#>  7 HTA12_251_1001     -3 ScRNA-seqLevel1  HTA12_251_3                
-#>  8 HTA12_251_2000     -2 ScRNA-seqLevel2  HTA12_251_3                
-#>  9 HTA12_251_2002     -2 ScATAC-seqLevel2 HTA12_251_3                
-#> 10 HTA12_251_3001     -1 ScATAC-seqLevel3 HTA12_251_3                
-#> 11 HTA12_251_3002     -1 ScATAC-seqLevel3 HTA12_251_3                
-#> 12 HTA12_251_3003     -1 ScATAC-seqLevel3 HTA12_251_3                
-#> 13 HTA12_251_4000      0 ScRNA-seqLevel4  HTA12_251_3
 ```
 
 Download an open file. Level 2 images in the CRDC General Commons need no
@@ -353,61 +383,30 @@ parquet with a manifest of checksums. It is published as the Hugging Face
 dataset [`seandavis/htan`](https://huggingface.co/datasets/seandavis/htan),
 one git tag per release, so `htan_con("r7")` always reads the same bytes.
 
-
-``` r
+```{r}
+#| label: snapshot-info
 info <- htan_snapshot_info(con)
 info[c("release", "phase", "source", "n_tables", "total_rows", "build_date")]
-#> $release
-#> [1] "r7"
-#> 
-#> $phase
-#> [1] "1"
-#> 
-#> $source
-#> [1] "isb-cgc-bq.HTAN_versioned"
-#> 
-#> $n_tables
-#> [1] "78"
-#> 
-#> $total_rows
-#> [1] "821773"
-#> 
-#> $build_date
-#> [1] "2026-10-14T11:53:18Z"
 ```
 
 The tables fall into two groups: clinical and biospecimen tables, and
 metadata tables (one or more per assay and level, plus `id_provenance`,
 `gc_drs_map` and the data-model `schema`):
 
-
-``` r
+```{r}
+#| label: table-groups
 htan_tables(con) |>
     count(category)
-#> # A tibble: 2 × 2
-#>   category                      n
-#>   <chr>                     <int>
-#> 1 clinical_biospecimen_data    16
-#> 2 metadata                     62
 ```
 
 A few tables were not refreshed in Release 7, so the snapshot takes them
 from the last release that had them:
 
-
-``` r
+```{r}
+#| label: old-tables
 htan_tables(con) |>
     filter(source_version != "r7") |>
     select(name, source_version, rows)
-#> # A tibble: 6 × 3
-#>   name                                        source_version  rows
-#>   <chr>                                       <chr>          <dbl>
-#> 1 imaging_level1_metadata                     r6_v2             16
-#> 2 lipidomics_metadata                         r2_v2             84
-#> 3 metabolomics_metadata                       r2_v2            176
-#> 4 proteomics_metadata                         r2               392
-#> 5 publication_manifest_metadata               r5                 1
-#> 6 tissueOrOrganOfOrigin_to_wholeOrgan_mapping r4               332
 ```
 
 ## How it relates to the authoritative sources
@@ -438,10 +437,12 @@ To use a mirror or a local build, set `options(HTAN.base_url = ...)`. The
 package also ships a tiny fixture of the snapshot (all 78 tables cut down to
 six participants), which its examples and tests use:
 
-
-``` r
+```{r}
+#| label: fixture
 fixture <- system.file("extdata", "snapshot", package = "HTAN")
 con_small <- htan_con("r7", base_url = fixture)
+htan_snapshot_info(con_small)[c("release", "n_tables", "total_rows")]
+htan_disconnect(con_small)
 ```
 
 # A quick tour
@@ -451,63 +452,32 @@ con_small <- htan_con("r7", base_url = fixture)
 `htan_tbl()` opens any table lazily. Here are the participants'
 demographics, summarised in DuckDB:
 
-
-``` r
+```{r}
+#| label: demographics
 htan_tbl("clinical_tier1_demographics", con) |>
     count(Gender, sort = TRUE) |>
     collect()
-#> # A tibble: 6 × 2
-#>   Gender           n
-#>   <chr>        <dbl>
-#> 1 Female        1454
-#> 2 Male           547
-#> 3 female         418
-#> 4 Not Reported   193
-#> 5 male           183
-#> 6 unknown         10
 ```
 
 The same value is spelled several ways: centers submitted their own
 metadata, and the DCC's validation did not normalise case. Clean values
 before you count or join on them:
 
-
-``` r
+```{r}
+#| label: demographics-clean
 htan_tbl("clinical_tier1_demographics", con) |>
     mutate(Gender = tolower(Gender)) |>
     count(Gender, sort = TRUE) |>
     collect()
-#> # A tibble: 4 × 2
-#>   Gender           n
-#>   <chr>        <dbl>
-#> 1 female        1872
-#> 2 male           730
-#> 3 not reported   193
-#> 4 unknown         10
 ```
 
 `htan_columns()` returns the column descriptions recorded in the BigQuery
 schema, which is the quickest way to learn what a field means:
 
-
-``` r
+```{r}
+#| label: columns
 htan_columns("id_provenance", con) |>
     select(column, description)
-#> # A tibble: 12 × 2
-#>    column                          description                                  
-#>    <chr>                           <chr>                                        
-#>  1 HTAN_Data_File_ID               Self-identifier for this data file - HTAN ID…
-#>  2 Filename                        Name of a file                               
-#>  3 entityId                        Synapse ID of entity                         
-#>  4 Component                       Category of metadata (e.g. Diagnosis, Biospe…
-#>  5 Data_Release                    Inclusion in HTAN Data Release e.g. Release …
-#>  6 GC_Release                      Released to CRDC’s General Commons (GC) as p…
-#>  7 HTAN_Center                     Name of HTAN Center e.g. HTAN HTAPP          
-#>  8 HTAN_Assayed_Biospecimen_ID     HTAN ID of the biospecimen directly assayed …
-#>  9 HTAN_Parent_Data_File_ID        HTAN Data File Identifier indicating the fil…
-#> 10 HTAN_Originating_Biospecimen_ID HTAN ID of the biopsied or resected biospeci…
-#> 11 HTAN_Participant_ID             HTAN ID associated with a patient based on H…
-#> 12 Biospecimen_Path                Full Biospecimen ancestry path from HTAN_Ass…
 ```
 
 ## Files
@@ -518,22 +488,16 @@ include the `Component` (the assay and level, as HTAN names it), `assay` and
 `entityId`, the General Commons `drs_uri`, the participants and
 biospecimens from `id_provenance`, and the `access` tier:
 
-
-``` r
+```{r}
+#| label: files
 files <- htan_files(con = con)
 files |>
     count(access) |>
     arrange(desc(n)) |>
     collect()
-#> # A tibble: 3 × 2
-#>   access            n
-#>   <chr>         <dbl>
-#> 1 open-synapse 154520
-#> 2 controlled    42897
-#> 3 open-gc       24271
 ```
 
-There are 221,688 files in Release 7. The tiers are:
+There are `r fmt(pull(count(files)))` files in Release 7. The tiers are:
 
 - `open-gc`: open Level 2 images in the General Commons, downloadable
   anonymously;
@@ -546,27 +510,13 @@ There are 221,688 files in Release 7. The tiers are:
 Filters go straight into `htan_files()`. For example, every open
 single-cell Level 4 file in AnnData format:
 
-
-``` r
+```{r}
+#| label: files-h5ad
 htan_files(assay == "ScRNA-seq", level == 4, extension == ".h5ad",
     con = con) |>
     select(HTAN_Data_File_ID, HTAN_Center, File_Size, n_participants) |>
     arrange(File_Size) |>
     collect()
-#> # A tibble: 70 × 4
-#>    HTAN_Data_File_ID HTAN_Center File_Size n_participants
-#>    <chr>             <chr>           <dbl>          <dbl>
-#>  1 HTA5_0000_1003255 HTAN DFCI    11599590              4
-#>  2 HTA5_0000_1003254 HTAN DFCI    12396714              4
-#>  3 HTA5_0000_1003271 HTAN DFCI    24735020              4
-#>  4 HTA5_0000_1003281 HTAN DFCI    30191344              4
-#>  5 HTA5_0000_1003295 HTAN DFCI    32403150              4
-#>  6 HTA5_0000_1003261 HTAN DFCI    34842022              4
-#>  7 HTA5_0000_1003274 HTAN DFCI    37313138              4
-#>  8 HTA5_0000_1003284 HTAN DFCI    38056449              4
-#>  9 HTA5_0000_1003243 HTAN DFCI    39081430              4
-#> 10 HTA5_0000_1003257 HTAN DFCI    40003858              4
-#> # ℹ 60 more rows
 ```
 
 Some files, such as merged single-cell objects, come from several
@@ -574,34 +524,18 @@ participants; their `HTAN_Participant_ID` is a comma-separated list. To find
 every file that involves a participant, use the `participants` argument,
 which handles that case, rather than `==`:
 
-
-``` r
+```{r}
+#| label: files-participant
 htan_files(participants = "HTA11_7862", con = con) |>
     count(Component, access) |>
     arrange(Component) |>
     collect()
-#> # A tibble: 13 × 3
-#>    Component                                      access           n
-#>    <chr>                                          <chr>        <dbl>
-#>  1 10xVisiumSpatialTranscriptomics-AuxiliaryFiles open-synapse     1
-#>  2 10xVisiumSpatialTranscriptomics-RNA-seqLevel1  controlled       2
-#>  3 10xVisiumSpatialTranscriptomics-RNA-seqLevel2  controlled       1
-#>  4 10xVisiumSpatialTranscriptomics-RNA-seqLevel3  open-synapse     4
-#>  5 10xVisiumSpatialTranscriptomics-RNA-seqLevel4  open-synapse     1
-#>  6 BulkWESLevel1                                  controlled       4
-#>  7 BulkWESLevel2                                  controlled       2
-#>  8 BulkWESLevel3                                  open-synapse     1
-#>  9 ImagingLevel2                                  open-synapse     3
-#> 10 ScRNA-seqLevel1                                controlled       6
-#> 11 ScRNA-seqLevel2                                controlled       3
-#> 12 ScRNA-seqLevel3                                open-synapse     3
-#> 13 ScRNA-seqLevel4                                open-synapse     4
 ```
 
 That one participant, from the Vanderbilt colorectal atlas, has Visium
 spatial transcriptomics, single-cell RNA-seq, whole-exome sequencing and
-imaging. The [analysis vignette](analysis-workflow.html) uses their Visium
-data.
+imaging. The [analysis vignette](analysis-workflow.html) analyses a Visium
+section from another Vanderbilt participant.
 
 ## Lineage
 
@@ -609,24 +543,13 @@ data.
 `id_provenance`. Depth 0 is the query file; negative depths are its
 ancestors:
 
-
-``` r
+```{r}
+#| label: lineage
 htan_lineage("HTA11_7862_200000101134111", con = con) |>
     select(related_file_id, depth, Filename) |>
     arrange(depth, related_file_id) |>
     collect() |>
     mutate(Filename = basename(Filename))
-#> # A tibble: 8 × 3
-#>   related_file_id            depth Filename                            
-#>   <chr>                      <int> <chr>                               
-#> 1 HTA11_7862_200000101131111    -3 8270-AS-0001_S1_L005_R1_001.fastq.gz
-#> 2 HTA11_7862_200000101131121    -3 8270-AS-0001_S1_L005_R2_001.fastq.gz
-#> 3 HTA11_7862_200000101132111    -2 8270_AS_1_possorted_genome_bam.bam  
-#> 4 HTA11_7862_200000101133111    -1 8270_AS_1_barcodes.tsv.gz           
-#> 5 HTA11_7862_200000101133121    -1 8270_AS_1_features.tsv.gz           
-#> 6 HTA11_7862_200000101133131    -1 8270_AS_1_matrix.mtx.gz             
-#> 7 HTA11_7862_200000101133141    -1 8270_AS_1_tissue_positions_list.csv 
-#> 8 HTA11_7862_200000101134111     0 8270_AS_1_unfiltered.h5ad
 ```
 
 The Level 4 Visium object was computed from four Level 3 Space Ranger
@@ -640,22 +563,16 @@ links are recorded and where they get complicated.
 and returns a table of local paths. An open image in the General Commons
 needs no account. This one is a 250 KB imaging mass cytometry image:
 
-
-``` r
+```{r}
+#| label: download-gc
 tiff <- htan_files(
     drs_uri == "dg.4DFC/6231a7d4-7e68-11ee-b51d-e7db3b9207b8", con = con)
 tiff |>
     select(HTAN_Data_File_ID, Component, File_Size, access) |>
     collect()
-#> # A tibble: 1 × 4
-#>   HTAN_Data_File_ID Component     File_Size access 
-#>   <chr>             <chr>             <dbl> <chr>  
-#> 1 HTA12_15_1105     ImagingLevel2    254833 open-gc
 dl <- htan_download(tiff, dest = tempfile("htan-"), con = con)
 dl$status
-#> [1] "downloaded"
 read_htan(dl) |> basename()
-#> [1] "HTAN_HT166P1_S1H5_L4_ROI_001.ome.tiff"
 ```
 
 `read_htan()` returns image paths unchanged; RBioFormats or cytomapper can
@@ -669,11 +586,17 @@ Processed files are on Synapse. To fetch them:
 3. put it in the `SYNAPSE_AUTH_TOKEN` environment variable, for example in
    `~/.Renviron`, and restart R.
 
+This chunk is not run when the vignette is built, because it needs a
+token; the [analysis vignette](analysis-workflow.html) runs the same steps
+when one is set.
 
-``` r
-visium <- htan_files(HTAN_Data_File_ID == "HTA11_7862_200000101134111",
+```{r}
+#| label: download-synapse
+#| eval: false
+visium <- htan_files(HTAN_Data_File_ID == "HTA11_99999933430_8422134111",
     con = con)
-dl <- htan_download(visium, dest = "htan-data", con = con)
+dl <- htan_download(visium, dest = file.path(tempdir(), "htan-data"),
+    con = con)
 spe <- read_htan(dl)
 ```
 
@@ -682,8 +605,8 @@ the files total more than `max_bytes` (20 GB by default), and skips files
 already present with the right md5. Controlled files are refused with a
 classed error:
 
-
-``` r
+```{r}
+#| label: download-controlled
 fastq <- htan_files(access == "controlled", con = con) |>
     arrange(HTAN_Data_File_ID) |>
     head(1)
@@ -691,10 +614,6 @@ tryCatch(
     htan_download(fastq, dest = tempfile(), con = con),
     htan_error_controlled = function(e) cat(conditionMessage(e))
 )
-#> Controlled-access files cannot be downloaded by HTAN.
-#> ✖ HTA10_0000_42410718832338308254033538547980
-#> ℹ Level 1/2 sequencing is under dbGaP phs002371; request access, then use the CRDC gen3-client.
-#> ℹ Drop them with `filter(access != "controlled")`.
 ```
 
 ## Reading and assembling
@@ -717,15 +636,18 @@ attaching that participant's demographics and diagnosis as `colData`. The
 
 # How these vignettes are built
 
-Bioconductor builds packages on machines without credentials and without
-network access, but these vignettes read the snapshot from Hugging Face,
-and one downloads from Synapse. So each vignette is written as a
-`.qmd.orig` source in the package repository and run ahead of time by
-`dev/precompute-vignettes.R` (`just precompute-vignettes`), which writes
-the `.qmd` you are reading, with its output and figures. Building the
-package only renders that markdown. The numbers in these vignettes are
-therefore the numbers at the time they were last precomputed; with a
-release pinned to `r7`, they should not change.
+The vignettes run their code when the package is built. They read the
+Release 7 snapshot from Hugging Face with `htan_con("r7")`, about 20 MB
+that BiocFileCache downloads once and then reuses, so every number, table
+and figure is computed from the real metadata at build time, not typed in.
+With the release pinned to `r7`, the numbers should not change between
+builds.
+
+The [analysis vignette](analysis-workflow.html) also downloads a file from
+Synapse, which needs a personal access token. Where `SYNAPSE_AUTH_TOKEN`
+is set, as in the package's own continuous integration, those steps run
+too. Without it, for example on the Bioconductor build machines, they are
+shown as code without output.
 
 # References
 
@@ -753,62 +675,7 @@ release pinned to `r7`, they should not change.
 
 # Session information
 
-
-``` r
+```{r}
+#| label: session-info
 sessionInfo()
-#> R version 4.6.0 (2026-04-24)
-#> Platform: aarch64-apple-darwin23
-#> Running under: macOS Tahoe 26.7.1
-#> 
-#> Matrix products: default
-#> BLAS:   /Library/Frameworks/R.framework/Versions/4.6/Resources/lib/libRblas.0.dylib 
-#> LAPACK: /Library/Frameworks/R.framework/Versions/4.6/Resources/lib/libRlapack.dylib;  LAPACK version 3.12.1
-#> 
-#> locale:
-#> [1] en_US.UTF-8/en_US.UTF-8/en_US.UTF-8/C/en_US.UTF-8/en_US.UTF-8
-#> 
-#> time zone: America/New_York
-#> tzcode source: internal
-#> 
-#> attached base packages:
-#> [1] stats     graphics  grDevices utils     datasets  methods   base     
-#> 
-#> other attached packages:
-#> [1] dplyr_1.2.1 HTAN_0.99.0 knitr_1.51 
-#> 
-#> loaded via a namespace (and not attached):
-#>  [1] SummarizedExperiment_1.43.0 rjson_0.2.23               
-#>  [3] xfun_0.60                   httr2_1.3.0                
-#>  [5] Biobase_2.73.2              lattice_0.22-9             
-#>  [7] vctrs_0.7.3                 tools_4.6.0                
-#>  [9] generics_0.1.4              stats4_4.6.0               
-#> [11] curl_7.1.0                  tibble_3.3.1               
-#> [13] RSQLite_3.53.3              blob_1.3.0                 
-#> [15] pkgconfig_2.0.3             Matrix_1.7-6               
-#> [17] dbplyr_2.6.0                desc_1.4.3                 
-#> [19] S4Vectors_0.51.6            lifecycle_1.0.5            
-#> [21] compiler_4.6.0              brio_1.1.5                 
-#> [23] Seqinfo_1.3.0               yaml_2.3.12                
-#> [25] pillar_1.11.1               SingleCellExperiment_1.35.2
-#> [27] cachem_1.1.0                DelayedArray_0.39.4        
-#> [29] magick_2.9.1                abind_1.4-8                
-#> [31] tidyselect_1.2.1            purrr_1.2.2                
-#> [33] duckdb_1.5.5                rprojroot_2.1.1            
-#> [35] fastmap_1.2.0               grid_4.6.0                 
-#> [37] cli_3.6.6                   SparseArray_1.12.2         
-#> [39] magrittr_2.0.5              S4Arrays_1.13.0            
-#> [41] utf8_1.2.6                  pkgbuild_1.4.8             
-#> [43] withr_3.0.3                 filelock_1.0.3             
-#> [45] bit64_4.8.2                 XVector_0.53.0             
-#> [47] matrixStats_1.5.0           bit_4.6.0                  
-#> [49] otel_0.2.0                  SpatialExperiment_1.23.0   
-#> [51] memoise_2.0.1               evaluate_1.0.5             
-#> [53] GenomicRanges_1.65.1        IRanges_2.47.2             
-#> [55] testthat_3.3.2              MultiAssayExperiment_1.39.0
-#> [57] BiocFileCache_3.2.0         rlang_1.3.0                
-#> [59] Rcpp_1.1.2                  glue_1.8.1                 
-#> [61] DBI_1.3.0                   BiocManager_1.30.27        
-#> [63] BiocGenerics_0.59.12        pkgload_1.5.3              
-#> [65] jsonlite_2.0.0              R6_2.6.1                   
-#> [67] MatrixGenerics_1.25.0
 ```
