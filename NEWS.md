@@ -31,12 +31,24 @@
   SpatialExperiment); images return their path.
 * `htan_experiment()` assembles a MultiAssayExperiment with participant
   colData from the clinical tables.
-* Four Quarto vignettes, precomputed against the r7 snapshot
-  (`dev/precompute-vignettes.R`, `just precompute-vignettes`):
-  "Introduction to HTAN", "The HTAN data model, identifiers and lineage",
-  "Exploring the HTAN Phase 1 atlas" and "From query to analysis". They
-  replace `HTAN.Rmd`. The analysis vignette's Synapse steps are filled in
-  when it is precomputed with `SYNAPSE_AUTH_TOKEN`.
+* Four Quarto vignettes: "Introduction to HTAN", "The HTAN data model,
+  identifiers and lineage", "Exploring the HTAN Phase 1 atlas" and "From
+  query to analysis". They replace `HTAN.Rmd`. They run live at build time
+  against the r7 snapshot; the precompute step
+  (`dev/precompute-vignettes.R`, `just precompute-vignettes`) is gone. The
+  analysis vignette's Synapse steps run when `SYNAPSE_AUTH_TOKEN` is set,
+  as in CI, and are shown unevaluated otherwise.
+* "From query to analysis" now analyses `HTA11_99999933430_8422134111`
+  (`7794_AS_3`, a probe-based Visium section of the transverse colon) in
+  place of `HTA11_7862_200000101134111`, whose pre-0.8 AnnData layout
+  anndataR cannot read. Its QC handles the probe panel's lack of
+  mitochondrial genes, and its interpretation follows the real output.
+* The introduction vignette has Introduction and Installation sections,
+  and every vignette has a date and a link to the package landing page.
+* The "From query to analysis" vignette runs its analysis with scrapper
+  (QC, normalisation, HVGs, PCA, Leiden clustering, UMAP, marker effect
+  sizes), as OSTA and scrapbook do, in place of scran, scuttle and
+  bluster, which leave Suggests along with uwot.
 * A ~1 MB r7 fixture snapshot ships in `inst/extdata/snapshot`.
 
 * Initial package scaffold: DESCRIPTION, CI (R CMD check on Bioconductor
