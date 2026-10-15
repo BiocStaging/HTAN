@@ -6,7 +6,7 @@
 \usage{
 htan_download(
   files,
-  dest = getOption("HTAN.download_dir", "."),
+  dest = getOption("HTAN.download_dir"),
   overwrite = FALSE,
   max_bytes = getOption("HTAN.max_download_bytes", 2e+10),
   token = Sys.getenv("SYNAPSE_AUTH_TOKEN"),
@@ -17,10 +17,12 @@ htan_download(
 \item{files}{The files to fetch: the result of \code{\link[=htan_files]{htan_files()}} (lazy or
 collected), or a character vector of \code{HTAN_Data_File_ID}s.}
 
-\item{dest}{\code{character(1)}. Directory to download into.}
+\item{dest}{\code{character(1)} or \code{NULL}. A directory to copy the files to,
+as well as caching them. \code{NULL} (the default, unless option
+\code{HTAN.download_dir} is set) returns the paths in the cache.}
 
 \item{overwrite}{\code{logical(1)}. Download again even if a verified copy is
-present.}
+cached or present in \code{dest}.}
 
 \item{max_bytes}{\code{numeric(1)}. Refuse to start if the files total more
 than this many bytes (Level 2 images are often several GB each).}
@@ -32,7 +34,9 @@ for \code{"open-synapse"} files.}
 }
 \value{
 A tibble, one row per file: \code{HTAN_Data_File_ID}, \code{access}, \code{path}
-and \code{status} (\code{"downloaded"} or \code{"present"}).
+(in the cache, or in \code{dest} if given) and \code{status}: \code{"downloaded"}
+(fetched now), \code{"cached"} (served from the cache) or \code{"present"}
+(already in \code{dest}).
 }
 \description{
 Fetches open-access HTAN files, routing each by its \code{access} tier from
@@ -49,10 +53,22 @@ personal access token in \code{SYNAPSE_AUTH_TOKEN}.
 requesting one is an error.
 }
 
-Files are written to \verb{<dest>/<Filename>}, keeping the directory layout in
-HTAN's \code{Filename} (so 10x/Visium bundles stay together), and checked
-against the md5 in the metadata. A file already present with the right
-md5 is not downloaded again.
+Downloads are cached. Each file is kept in a BiocFileCache, keyed by its
+\code{HTAN_Data_File_ID} and md5, under the same relative path as HTAN's
+\code{Filename} (so 10x/Visium bundles stay together), and checked against
+the md5 in the metadata before it enters the cache. Asking for a file
+again is served from the cache after checking its md5 again; a cached
+copy that no longer matches is downloaded afresh. Nothing is written to
+the working directory.
+
+The cache is the \code{downloads} directory inside the snapshot cache of
+\code{\link[=htan_con]{htan_con()}} (option \code{HTAN.cache}, then
+\code{tools::R_user_dir("HTAN", "cache")}), or option \code{HTAN.download_cache}
+if set. It is a BiocFileCache of its own, so it can be moved or cleared
+without touching the snapshot, e.g. with \code{BiocFileCache::removebfc()}.
+
+With \code{dest}, each file is also copied to \verb{<dest>/<Filename>}, and a copy
+already there with the right md5 is used as is.
 }
 \examples{
 fixture <- system.file("extdata", "snapshot", package = "HTAN")
@@ -60,8 +76,11 @@ con <- htan_con("r7", base_url = fixture)
 ## a 250 KB open IMC image, fetched anonymously from General Commons
 tiff <- htan_files(drs_uri == "dg.4DFC/6231a7d4-7e68-11ee-b51d-e7db3b9207b8",
     con = con)
-\dontrun{
-htan_download(tiff, dest = tempfile(), con = con)
+\donttest{
+dl <- htan_download(tiff, con = con)
+dl$status
+## a second call is served from the cache
+htan_download(tiff, con = con)$status
 }
 
 }

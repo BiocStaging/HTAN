@@ -296,19 +296,6 @@ htan_snapshot_info <- function(con = htan_con()) {
     invisible(TRUE)
 }
 
-.bfc <- function(cache) {
-    BiocFileCache::BiocFileCache(cache, ask = FALSE)
-}
-
-## Absolute path of the cached resource `rname` (named by its rid), or NULL.
-.bfc_hit <- function(bfc, rname) {
-    hit <- BiocFileCache::bfcquery(bfc, rname, field = "rname", exact = TRUE)
-    if (!nrow(hit)) {
-        return(NULL)
-    }
-    BiocFileCache::bfcrpath(bfc, rids = hit$rid[1L])
-}
-
 ## ---- DuckDB --------------------------------------------------------------
 
 .open_duckdb <- function(manifest, paths) {
@@ -383,6 +370,22 @@ htan_snapshot_info <- function(con = htan_con()) {
 }
 
 ## ---- shared helpers ------------------------------------------------------
+
+## BiocFileCache access, shared with the download cache in R/download.R.
+## bfcquery() returns rpath relative to the cache, so resolve hits with
+## bfcrpath().
+.bfc <- function(cache) {
+    BiocFileCache::BiocFileCache(cache, ask = FALSE)
+}
+
+## Absolute path of the cached resource `rname` (named by its rid), or NULL.
+.bfc_hit <- function(bfc, rname) {
+    hit <- BiocFileCache::bfcquery(bfc, rname, field = "rname", exact = TRUE)
+    if (!nrow(hit)) {
+        return(NULL)
+    }
+    BiocFileCache::bfcrpath(bfc, rids = hit$rid[1L])
+}
 
 .htan_request <- function(url) {
     req <- httr2::request(url)
