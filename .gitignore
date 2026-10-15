@@ -5,8 +5,11 @@
 *.Rproj
 HTAN.Rcheck/
 HTAN_*.tar.gz
+# Quarto vignette render output.
 vignettes/*.html
 vignettes/*_cache/
+vignettes/*_files/
+vignettes/.quarto/
 inst/doc
 # pkgdown output; the site is deployed from CI.
 docs/
