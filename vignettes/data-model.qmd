@@ -36,10 +36,10 @@ Package: [*HTAN*](https://bioconductor.org/packages/HTAN)
 
 HTAN's metadata answer three questions about every data file: what assay
 and processing step produced it, which biospecimen it was measured on, and
-which participant that biospecimen came from. This vignette explains how
-the Phase 1 data model records those answers, how to follow them with the
-*HTAN* package, and where the records are messier than the model suggests.
-It assumes you have read the [introduction](HTAN.html).
+which participant that biospecimen came from. This vignette shows how the
+Phase 1 data model records the answers, how to follow them with *HTAN*, and
+where the records are messier than the model suggests. It assumes you have
+read the [introduction](HTAN.html).
 
 All output below was computed from the Release 7 snapshot:
 
@@ -68,7 +68,8 @@ archived, and documented in the HTAN manual
 ISB-CGC loads each component into its own BigQuery table, and the
 snapshot keeps those tables as they are. The model itself is in the
 snapshot too, as the `schema` table: one row per attribute, with its
-description, valid values and the component it belongs to.
+description, valid values and the component it belongs to. Here is the
+attribute that links a file to the files it came from:
 
 ```{r}
 #| label: schema
@@ -83,21 +84,21 @@ schema |>
 ## Clinical data
 
 Phase 1 clinical data are organised in three tiers
-([metadata standards](https://docs.humantumoratlas.org/data_model/metadata_standards/)):
+([metadata standards](https://docs.humantumoratlas.org/data_model/metadata_standards/)).
+Tier 1 follows the NCI Genomic Data Commons clinical model, in seven
+components: demographics, diagnosis, exposure, family history, follow-up,
+molecular test and therapy. Tier 2 adds disease-agnostic HTAN extensions,
+and tier 3 adds disease-specific ones (breast, colorectal, lung, melanoma,
+brain and others).
 
-- **Tier 1** follows the NCI Genomic Data Commons clinical model, in seven
-  components: demographics, diagnosis, exposure, family history, follow-up,
-  molecular test and therapy.
-- **Tier 2** adds disease-agnostic HTAN extensions.
-- **Tier 3** adds disease-specific extensions (breast, colorectal, lung,
-  melanoma, brain and others).
-
-Each clinical record carries the `HTAN_Participant_ID` it describes. Dates
-are recorded as a number of days from the participant's index date, which
-the center chooses and records, never as calendar dates, so that records
-stay de-identified.
+Each clinical record carries the `HTAN_Participant_ID` it describes. To
+keep records de-identified, dates are never calendar dates. They are
+recorded as a number of days from the participant's index date, which the
+center chooses and records.
 
 ## The main tables
+
+Row counts are for Release 7:
 
 ```{r}
 #| label: table-list
@@ -141,9 +142,8 @@ Every assay table shares a core set of columns (`HTAN_Data_File_ID`,
 `entityId`, `HTAN_Center` and `Data_Release`), plus assay-specific fields:
 workflow and reference genome for sequencing, channels and microscope for
 imaging, capture area and slide for Visium. `htan_files()` stacks the core
-columns of all of them. The table below lists the file components in
-Release 7 with the model's own description of each, from the `schema`
-table:
+columns of all of them. Here are the file components in Release 7, each
+with the model's own description from the `schema` table:
 
 ```{r}
 #| label: components
@@ -184,7 +184,7 @@ biospecimen or a file; the table it appears in does. (Phase 2 adds `B` and
 `D` markers, as in `HTA209_1_B1` and `HTA209_1_D1`.) A participant number of
 `0000` marks data pooled from several participants.
 
-Splitting an ID into its parts is a regular expression:
+A regular expression splits an ID into its parts:
 
 ```{r}
 #| label: parse-ids
@@ -202,8 +202,8 @@ parse_htan_id(c("HTA11_7862", "HTA11_7862_2000001011",
     "HTA11_7862_200000101134111", "HTA5_0000_1003255"))
 ```
 
-The prefix identifies the center that submitted the data, which you can
-check against the `HTAN_Center` column:
+The prefix names the center that submitted the data. You can check that
+against the `HTAN_Center` column:
 
 ```{r}
 #| label: prefix-center
@@ -215,13 +215,14 @@ htan_files(con = con) |>
 ```
 
 Two quirks show up. Files with the PCAPP prefix `HTA2` were submitted
-under `HTAN BU`, and a few `HTA5` files under `HTAN SRRS`. There are no
-`HTA16` (CASI) files in Release 7. To group by center, use `HTAN_Center`;
-to group by the atlas a participant was enrolled in, use the prefix.
+under `HTAN BU`, and a few `HTA5` files under `HTAN SRRS`. And there are
+no `HTA16` (CASI) files in Release 7 at all. To group by center, use
+`HTAN_Center`; to group by the atlas a participant was enrolled in, use
+the prefix.
 
-`regexp_extract()` is a DuckDB function; dbplyr passes functions it does not
-know straight through to SQL, so DuckDB's string and regex functions can be
-used inside dplyr verbs.
+`regexp_extract()` is a DuckDB function. dbplyr passes functions it does
+not know straight through to SQL, so you can use DuckDB's string and regex
+functions inside dplyr verbs.
 
 ## Do not parse the participant out of a file ID
 
@@ -248,23 +249,25 @@ Of the `r fmt(nrow(single))` files that come from one participant,
 another participant's number in their own ID, most of them from
 `r names(sort(table(sub("_.*", "", mismatch$HTAN_Data_File_ID)), decreasing = TRUE))[1]`
 (CHOP).
-In addition,
-`r fmt(sum(grepl("^HTA[0-9]+_0000_", f$HTAN_Data_File_ID)))` files have the
+Across all files,
+`r fmt(sum(grepl("^HTA[0-9]+_0000_", f$HTAN_Data_File_ID)))` have the
 pooled participant number `0000`, and
-`r fmt(sum(f$n_participants > 1))` files are attributed to more than one
-participant. The participant of a file is whatever `id_provenance` says,
-and `htan_files()` takes it from there.
+`r fmt(sum(f$n_participants > 1))` are attributed to more than one
+participant. A file's participant is whatever `id_provenance` says, and
+that is where `htan_files()` gets it.
 
 # The hierarchy: participant, biospecimen, file
 
 ## Biospecimens
 
 The `biospecimen` table holds
-`r fmt(pull(count(htan_tbl("biospecimen", con))))` rows. Each has an `HTAN_Parent_ID`: for an originating biospecimen (the
-biopsy or resection itself) that is the participant; for a derived
-biospecimen (a block, a section, a cell suspension, an extracted analyte)
-it is the biospecimen it was cut or extracted from. Following those links
-gives the biospecimen's ancestry.
+`r fmt(pull(count(htan_tbl("biospecimen", con))))` rows. Each has an
+`HTAN_Parent_ID`. For an originating biospecimen (the biopsy or resection
+itself) that is the participant; for a derived biospecimen (a block, a
+section, a cell suspension, an extracted analyte) it is the biospecimen it
+was cut or extracted from. Follow those links and you have the
+biospecimen's ancestry. Counting what each parent ID points to shows that
+not every one is a participant or a biospecimen:
 
 ```{r}
 #| label: biospecimens
@@ -304,11 +307,11 @@ biospecimen_path <- function(id, bs) {
 biospecimen_path("HTA5_1430_1022", bs)
 ```
 
-Here is that path with each biospecimen's annotation. Participant
-HTA5_1430, from the Dana-Farber melanoma atlas, had a lymph node
-metastasis resected (every biospecimen in the chain has
-`Tumor_Tissue_Type` "Metastatic"); the fresh resection (`_1000`) was divided, snap
-frozen, and divided again before an assay was run on `_1022`:
+Participant HTA5_1430, from the Dana-Farber melanoma atlas, had a lymph
+node metastasis resected (every biospecimen in the chain has
+`Tumor_Tissue_Type` "Metastatic"). The fresh resection (`_1000`) was
+divided, snap frozen and divided again before an assay was run on `_1022`.
+Here is the path with each biospecimen's annotation:
 
 ```{r}
 #| label: walk-biospecimen-table
@@ -326,13 +329,11 @@ to the assayed biospecimen describes what was measured.
 ## Files
 
 Files connect to biospecimens and to each other through two columns of the
-assay tables:
-
-- **Level 1** files (and other files measured directly on a sample) have an
-  `HTAN_Parent_Biospecimen_ID`: the biospecimen that went into the
-  instrument.
-- **Level 2 to 4** files have an `HTAN_Parent_Data_File_ID`: the file or
-  files they were computed from.
+assay tables. Level 1 files, and other files measured directly on a
+sample, have an `HTAN_Parent_Biospecimen_ID`: the biospecimen that went
+into the instrument. Level 2 to 4 files have an
+`HTAN_Parent_Data_File_ID`, naming the file or files they were computed
+from.
 
 So a Level 4 single-cell object points at its Level 3 count matrices,
 which point at Level 2 alignments, which point at Level 1 FASTQs, which
@@ -345,7 +346,8 @@ DCC did it once, for every file, and published the result as
 
 `id_provenance` has one row per combination of a file, one of its parent
 files, and one of the biospecimens it was derived from, with the
-participant attached. Its columns:
+participant attached. Its columns, with the descriptions cut to 70
+characters:
 
 ```{r}
 #| label: prov-columns
@@ -354,14 +356,12 @@ htan_columns("id_provenance", con) |>
     mutate(description = substr(description, 1, 70))
 ```
 
-The terms used for biospecimens come from the HTAN manual
-([relationships](https://docs.humantumoratlas.org/data_model/relationships/)):
-
-- the **originating biospecimen** is the biopsy or resection taken from the
-  participant;
-- the **assayed biospecimen** is the one put into the instrument;
-- the **biospecimen path** is the chain from originating to assayed,
-  comma-separated.
+The biospecimen terms come from the HTAN manual
+([relationships](https://docs.humantumoratlas.org/data_model/relationships/)).
+The *originating biospecimen* is the biopsy or resection taken from the
+participant, the *assayed biospecimen* is the one put into the instrument,
+and the *biospecimen path* is the comma-separated chain from the first to
+the second. In Release 7 the table holds:
 
 ```{r}
 #| label: prov-size
@@ -377,7 +377,7 @@ prov |>
 ```
 
 A file has more than one row whenever it has several parents or several
-biospecimens. The counts per file:
+biospecimens. Here are the counts per file, in bins:
 
 ```{r}
 #| label: prov-multiplicity
@@ -455,7 +455,7 @@ bs |>
 The biospecimen is a fresh biopsy of a premalignant lesion of the sigmoid
 colon. Its `Histologic_Morphology_Code` (not shown above) is `M82110`,
 the ICD-O-3 code for tubular adenoma, the common precancerous colorectal
-polyp. The participant's diagnosis record is uninformative:
+polyp. The participant's diagnosis record tells us almost nothing:
 
 ```{r}
 #| label: visium-diagnosis
@@ -491,7 +491,8 @@ prov |>
     collect()
 ```
 
-The comma-separated form is common:
+The comma-separated form is common. Here, for four assay tables, is the
+number of files whose parent field holds a list:
 
 ```{r}
 #| label: comma-parents
@@ -512,13 +513,14 @@ bind_rows(lapply(c("scRNAseq_level3_metadata", "scRNAseq_level4_metadata",
 ```
 
 A filter such as `HTAN_Parent_Data_File_ID == "HTA11_7862_200000101133111"`
-on the assay table misses this file. Either query `id_provenance`, or split
-the field first; in DuckDB, `unnest(string_split(x, ','))` does it.
+on the assay table misses the Visium object. Query `id_provenance`
+instead, or split the field first; in DuckDB,
+`unnest(string_split(x, ','))` does it.
 
 ## Descendants of a raw file
 
-Walking down from a Level 1 file shows everything computed from it. This
-is a single-cell RNA-seq FASTQ from Washington University:
+Walking down from a Level 1 file finds everything computed from it. Take
+a single-cell RNA-seq FASTQ from Washington University:
 
 ```{r}
 #| label: descendants
@@ -528,17 +530,17 @@ htan_lineage("HTA12_251_1000", direction = "descendants", con = con) |>
     collect()
 ```
 
-The descendants mix the two assays: the scRNA-seq alignment is recorded as
-a parent of scATAC-seq Level 3 files, and those are parents of both the
-RNA and the ATAC Level 4 objects. This is presumably a multiome (joint RNA
-and ATAC) experiment processed together; the metadata do not say so
-directly. Either way, lineage is a
-graph, not a tree, and the assay can change along a path.
+The descendants mix two assays. The scRNA-seq alignment is recorded as a
+parent of scATAC-seq Level 3 files, and those are parents of both the RNA
+and the ATAC Level 4 objects. This is presumably a multiome (joint RNA and
+ATAC) experiment processed together, though the metadata do not say so
+directly. Either way, lineage is a graph rather than a tree, and the assay
+can change along a path.
 
 ## A multiplexed imaging cell table
 
-Imaging follows the same pattern. A Level 4 cell-by-marker table from an
-Orion whole-slide image (Harvard Medical School):
+Imaging follows the same pattern. Here is a Level 4 cell-by-marker table
+from an Orion whole-slide image (Harvard Medical School):
 
 ```{r}
 #| label: imaging-lineage
@@ -548,9 +550,9 @@ htan_lineage("HTA7_1000_1003", con = con) |>
     transmute(depth, related_file_id, Component, file = basename(Filename))
 ```
 
-The table was computed from a segmentation mask (Level 3), which was
-computed from the stitched, registered image (Level 2). The channels
-(markers) of imaging files are listed in `imaging_channel_metadata`.
+The table was computed from a segmentation mask (Level 3), and the mask
+from the stitched, registered image (Level 2). For the channels (markers)
+of an imaging file, see `imaging_channel_metadata`.
 
 ## A file from several participants
 
@@ -574,11 +576,11 @@ prov |>
 
 The attribution comes from its parent, a Level 3 file that was itself
 pooled from four participants' samples (the `0000` in its ID). The
-metadata cannot tell you which cells in this object came from which
-participant; if the object records it, it does so in its own cell
-annotations. That is why `htan_experiment()` asks for a `participant_col`
-when a file has more than one participant: it needs the column of
-`colData` that names each cell's participant or biospecimen.
+metadata cannot tell you which cells in the object came from which
+participant. If the object records that at all, it does so in its own
+cell annotations. So when a file has more than one participant,
+`htan_experiment()` asks for a `participant_col`: the column of `colData`
+that names each cell's participant or biospecimen.
 
 # Pitfalls
 
@@ -590,12 +592,12 @@ most likely to give silently wrong answers.
 `Biospecimen_Path` in `id_provenance` and `Adjacent_Biospecimen_IDs` in
 `biospecimen` hold comma-separated lists. In `htan_files()`,
 `HTAN_Participant_ID` and `HTAN_Assayed_Biospecimen_ID` are comma-separated
-for multi-participant files. Never compare them with `==`; use
-`id_provenance`, the `participants` argument of `htan_files()`, or split
-them.
+for multi-participant files. Never compare these fields with `==`. Use
+`id_provenance` or the `participants` argument of `htan_files()`, or
+split them first.
 
 **Several parents, several participants.** A file can have many parents
-and many participants (see the multiplicity table above). Joining
+and many participants (see the multiplicity table above), so joining
 `id_provenance` to anything multiplies rows. Use `distinct()` or
 aggregate to one row per file before joining, as `htan_files()` does.
 
@@ -605,9 +607,9 @@ another participant's number in their ID. Take participants from
 `id_provenance`.
 
 **Biospecimen parents that lead nowhere.** Most biospecimens point to a
-participant or another biospecimen, but some point to themselves (a
-cycle that a naive recursive walk never leaves) and some to participant
-IDs with no demographics record. The `biospecimen_path()` function above
+participant or another biospecimen. Some point to themselves, a cycle
+that a naive recursive walk never leaves, and some to participant IDs
+with no demographics record. The `biospecimen_path()` function above
 stops at both.
 
 **Duplicate records.** Some participants and biospecimens appear more than
@@ -629,15 +631,16 @@ bind_rows(
 ```
 
 A participant can legitimately have several diagnoses, but duplicated
-demographics and biospecimen rows are most likely entry artefacts. Decide which row to
-keep before joining. `htan_experiment()` keeps the first row per
-participant, ordered by ID.
+demographics and biospecimen rows are most likely entry artefacts. Decide
+which row to keep before joining; `htan_experiment()` keeps the first row
+per participant, ordered by ID.
 
 **Spelling and missingness.** Categorical values vary in case and form
 (`Female` and `female`, `Primary` and `primary`, `Not Recorded` and
 `Not recorded`), and missing values appear as `NA`, `"Not Reported"`,
-`"unknown"`, `"Not Applicable"` and sometimes `"0"`. Normalise case and
-decide what counts as missing before you tabulate:
+`"unknown"`, `"Not Applicable"` and sometimes `"0"`. Before you tabulate,
+normalise case and decide what counts as missing. Here are the values of
+`Tumor_Tissue_Type`:
 
 ```{r}
 #| label: missingness
@@ -652,7 +655,7 @@ htan_tbl("biospecimen", con) |>
 with codes like `"Not Applicable"`. Convert them with `as.numeric()`, which
 turns the codes into `NA`, and treat a value of `0` with suspicion. In the
 Vanderbilt diagnosis record above, `Age_at_Diagnosis` is `"0"` while every
-other field is "Not Reported", which looks like a placeholder, not an
+other field is "Not Reported"; that looks more like a placeholder than an
 age.
 
 ```{r}
@@ -669,8 +672,8 @@ assay table (for example, mass spectrometry files in both a Release 7
 table and a legacy Release 2 table). `htan_files()` keeps one row per file,
 from the newest table.
 
-**Files without provenance.** Some files have no `id_provenance` rows, so
-no participant:
+**Files without provenance.** Some files have no `id_provenance` rows,
+and therefore no participant. By component:
 
 ```{r}
 #| label: no-provenance
