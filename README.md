@@ -1,6 +1,6 @@
 # HTAN
 
-> Human Tumor Atlas Network data in R, as Bioconductor objects, with no
+> Human Tumor Atlas Network data in R, as Bioconductor objects, without a
 > Google account.
 
 <!-- badges: start -->
@@ -22,10 +22,10 @@ This package lets you find those files, trace where each came from,
 download the open ones and read them into `SingleCellExperiment`,
 `SpatialExperiment` and `MultiAssayExperiment` objects. The metadata comes
 from a versioned parquet snapshot that you query locally with dplyr through
-DuckDB. The queryable HTAN metadata tables are otherwise published in Google
-BigQuery, which needs a Google account and a billing project; with this
-package a fresh R session, or a Bioconductor build machine, can query all of
-HTAN Phase 1 anonymously.
+DuckDB. Outside this package, the queryable HTAN metadata tables are
+published in Google BigQuery, which needs a Google account and a billing
+project. Here, a fresh R session or a Bioconductor build machine can query
+all of HTAN Phase 1 anonymously.
 
 ## Install
 
@@ -59,14 +59,14 @@ img <- htan_files(access == "open-gc", File_Size < 1e6) |> head(1)
 dl <- htan_download(img)               # anonymous, no account; cached
 ```
 
-Every query returns a lazy table: filter, join and count it with dplyr, and
-nothing is computed until you `collect()` it. `htan_download()` checks
+Every query returns a lazy table. You filter, join and count it with dplyr,
+and nothing is computed until you `collect()` it. `htan_download()` checks
 each file's md5 and keeps it in a BiocFileCache under
-`tools::R_user_dir("HTAN", "cache")`, so asking again costs nothing; pass
-`dest` to also copy the files to a directory of your choice. `read_htan()`
-turns downloaded files into Bioconductor objects, and `htan_experiment()`
-assembles several into a `MultiAssayExperiment` with participant clinical
-data as `colData`.
+`tools::R_user_dir("HTAN", "cache")`, so a second request for the same file
+costs nothing; pass `dest` to also copy the files to a directory of your
+choice. `read_htan()` turns downloaded files into Bioconductor objects, and
+`htan_experiment()` assembles several of them into a `MultiAssayExperiment`
+with participant clinical data as `colData`.
 
 ## What you can get
 
@@ -88,14 +88,15 @@ each table's source, row count, columns and sha256. `htan_con()` downloads
 the files once, checks every sha256 before caching them with BiocFileCache,
 and opens one DuckDB view per table.
 
-The tables are exported from the [ISB-CGC](https://isb-cgc.org) HTAN
-BigQuery release tables, each read from its pinned, versioned copy, by a
-maintainer-only builder in
-[`inst/scripts/build_snapshot`](inst/scripts/build_snapshot). You can also
-browse the dataset on Hugging Face, read it from DuckDB directly
-(`hf://datasets/seandavis/htan@r7/<table>.parquet`), point the package at a
-mirror or local build with `options(HTAN.base_url = ...)`, or use the tiny
-fixture snapshot that ships with the package for examples and tests. The
+A maintainer-only builder in
+[`inst/scripts/build_snapshot`](inst/scripts/build_snapshot) exports the
+[ISB-CGC](https://isb-cgc.org) HTAN BigQuery release tables, each from its
+pinned, versioned copy. You don't have to go through
+the package to use the snapshot. You can browse the dataset on Hugging Face
+or read it from DuckDB directly
+(`hf://datasets/seandavis/htan@r7/<table>.parquet`). Within the package,
+`options(HTAN.base_url = ...)` points it at a mirror or a local build, and a
+tiny fixture snapshot ships with the package for examples and tests. The
 design is recorded in [`adr/`](adr/).
 
 ## Learn more
@@ -116,28 +117,28 @@ on the same site.
 
 ## Status
 
-Version 0.99.x, experimental. The snapshot build, the Hugging Face default
+Version 0.99.x, experimental. The snapshot build, the Hugging Face default,
 anonymous DRS downloads and Synapse downloads with a personal access token
 have been verified against the live services
-([#7](https://github.com/seandavi/HTAN/issues/7)). The readers are tested on
-synthetic and example data, not yet systematically on real HTAN Level 4
-files ([#8](https://github.com/seandavi/HTAN/issues/8)).
+([#7](https://github.com/seandavi/HTAN/issues/7)). The readers have been
+tested on synthetic and example data but not yet systematically on real
+HTAN Level 4 files ([#8](https://github.com/seandavi/HTAN/issues/8)).
 
 ## How this package was written
 
-Almost all of the code, tests, documentation and vignettes were written by
-an AI coding agent, [Claude Code](https://claude.com/claude-code)
-(Anthropic), working from the maintainer's design and under the maintainer's
+An AI coding agent, [Claude Code](https://claude.com/claude-code)
+(Anthropic), wrote almost all of the code, tests, documentation and
+vignettes, working from the maintainer's design and under the maintainer's
 direction and review. The maintainer set the architecture (recorded in
-[`adr/`](adr/)), chose the data sources and the scope, reviewed the work and
-is responsible for the package, its correctness and its maintenance.
+[`adr/`](adr/)), chose the data sources and the scope, reviewed the work,
+and is responsible for the package, its correctness and its maintenance.
 
 Each commit written with the agent carries a `Co-Authored-By:` trailer, so
 `git log` records the provenance of every change. The offline test suite,
 `R CMD check` and BiocCheck run on every pull request, and live integration
-tests against the HTAN services run weekly. No third-party code was
-copied into the package, and everything here is released under the
-package's MIT license. [CONTRIBUTING.md](CONTRIBUTING.md#how-we-use-ai-coding-agents)
+tests against the HTAN services run weekly. No third-party code was copied
+into the package, and everything here is released under the package's MIT
+license. [CONTRIBUTING.md](CONTRIBUTING.md#how-we-use-ai-coding-agents)
 describes how agent-assisted work is reviewed.
 
 ## Citation
