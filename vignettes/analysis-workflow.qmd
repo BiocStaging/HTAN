@@ -20,7 +20,8 @@ vignette: >
   %\VignetteEncoding{UTF-8}
 ---
 
-```{r setup}
+```{r}
+#| label: setup
 #| include: false
 ## Chunks that download from Synapse run only when a token is available.
 have_token <- nzchar(Sys.getenv("SYNAPSE_AUTH_TOKEN"))
@@ -54,7 +55,8 @@ personal access token in `SYNAPSE_AUTH_TOKEN` (see the introduction), so
 where the vignette is built without a token, for example on the
 Bioconductor build machines, that code is shown without being run.
 
-```{r packages}
+```{r}
+#| label: packages
 #| warning: false
 library(SpatialExperiment)
 library(scater)
@@ -86,7 +88,8 @@ the metadata say the tissue is.
 tissue section. Level 4 Visium files are processed objects, ready to
 analyse. Here are the open ones:
 
-```{r visium-candidates}
+```{r}
+#| label: visium-candidates
 visium <- htan_files(
     assay == "10xVisiumSpatialTranscriptomics-RNA-seq", level == 4,
     access == "open-synapse", con = con)
@@ -104,7 +107,8 @@ are recorded, so the result can be read against them. Third, size: small
 enough to download in seconds. The biospecimen fields come from the
 `biospecimen` table, joined on the assayed biospecimen:
 
-```{r candidates}
+```{r}
+#| label: candidates
 biospecimens <- htan_tbl("biospecimen", con) |>
     select(HTAN_Assayed_Biospecimen_ID = HTAN_Biospecimen_ID,
         Tumor_Tissue_Type, Site_of_Resection_or_Biopsy)
@@ -131,7 +135,8 @@ smaller than `7794_AS_3_unfiltered.h5ad` in this list is in that older
 layout (checked by opening each one), so this vignette uses
 `7794_AS_3`, the smallest file in the current layout:
 
-```{r pick}
+```{r}
+#| label: pick
 visium_id <- "HTA11_99999933430_8422134111"
 stopifnot(visium_id %in% candidates$HTAN_Data_File_ID)
 file <- htan_files(HTAN_Data_File_ID == visium_id, con = con) |> collect()
@@ -146,7 +151,8 @@ needed but no data access request.
 
 The assay table holds the processing details:
 
-```{r workflow}
+```{r}
+#| label: workflow
 workflow <- htan_tbl(
     "10xvisium_spatialtranscriptomics_scRNAseq_level4_metadata", con) |>
     filter(HTAN_Data_File_ID == visium_id) |>
@@ -170,7 +176,8 @@ need to handle.
 
 Before using a processed file, check what it was made from:
 
-```{r lineage}
+```{r}
+#| label: lineage
 lineage <- htan_lineage(visium_id, con = con) |>
     arrange(depth, related_file_id) |>
     collect()
@@ -183,7 +190,8 @@ FASTQ (Level 1, controlled), aligned BAM (Level 2, controlled), the Space
 Ranger output (Level 3, open) and this object (Level 4). All were measured
 on one biospecimen. Its record, and the participant's:
 
-```{r biospecimen}
+```{r}
+#| label: biospecimen
 biospecimen <- htan_tbl("biospecimen", con) |>
     filter(HTAN_Biospecimen_ID == !!file$HTAN_Assayed_Biospecimen_ID) |>
     select(HTAN_Biospecimen_ID, HTAN_Parent_ID, Acquisition_Method_Type,
@@ -217,7 +225,8 @@ carcinoma, or of what type; the analysis has to be read without that.
 The participant has other data too, which could extend this analysis
 later:
 
-```{r other-data}
+```{r}
+#| label: other-data
 htan_files(participants = file$HTAN_Participant_ID, con = con) |>
     count(Component, access) |>
     arrange(Component) |>
@@ -231,7 +240,8 @@ a short-lived download URL, fetches the file, and verifies its md5 against
 the metadata. A second call finds the verified copy and does not download
 again.
 
-```{r download}
+```{r}
+#| label: download
 #| eval: !expr have_token
 dest <- file.path(tempdir(), "htan-data")
 dl <- htan_download(file, dest = dest, con = con)
@@ -244,7 +254,8 @@ dl
 has a `spatial` embedding (the layout scanpy writes for Visium), the result
 is a `SpatialExperiment` with the spot positions as `spatialCoords()`:
 
-```{r read}
+```{r}
+#| label: read
 #| eval: !expr have_token
 spe <- read_htan(dl)
 spe
@@ -254,7 +265,8 @@ Level 4 objects differ between centers, so look before you compute. Three
 things matter here: which assay holds raw counts, whether there are spot
 coordinates, and which spots are under tissue.
 
-```{r inspect}
+```{r}
+#| label: inspect
 #| eval: !expr have_token
 assayNames(spe)
 names(colData(spe))
@@ -269,7 +281,8 @@ call it different things), keeping names unique. Some probe-set features
 are named `DEPRECATED_` followed by an Ensembl ID; they are counted here
 and left as they are.
 
-```{r symbols}
+```{r}
+#| label: symbols
 #| eval: !expr have_token
 if (mean(grepl("^ENSG", rownames(spe))) > 0.5) {
     symbol_col <- intersect(c("gene_symbols", "gene_name", "feature_name",
@@ -284,7 +297,8 @@ anndataR maps AnnData's main matrix `X` to an assay named `X`. Whether `X`
 is raw counts or normalised values is the center's choice, so test it: raw
 counts are whole numbers.
 
-```{r counts}
+```{r}
+#| label: counts
 #| eval: !expr have_token
 x <- assay(spe, "X")
 sample_values <- as.numeric(x[, seq_len(min(200, ncol(x)))])
@@ -301,7 +315,8 @@ If the object had no spatial embedding, the spot positions are in the
 Level 3 `tissue_positions.csv` from the lineage table, which can be
 downloaded and joined by barcode. This chunk does that only when needed:
 
-```{r coordinates}
+```{r}
+#| label: coordinates
 #| eval: !expr have_token
 if (!is(spe, "SpatialExperiment")) {
     pos_id <- lineage$related_file_id[
@@ -323,7 +338,8 @@ dim(spatialCoords(spe))
 Finally, keep only spots under tissue. Spots outside the tissue capture
 ambient RNA and would form their own spurious cluster:
 
-```{r in-tissue}
+```{r}
+#| label: in-tissue
 #| eval: !expr have_token
 if ("in_tissue" %in% names(colData(spe))) {
     print(table(in_tissue = spe$in_tissue))
@@ -341,7 +357,8 @@ and fills `colData` with the participant's demographics and diagnosis.
 Biospecimen annotation is per sample rather than per participant, so it is
 added to the spots' own `colData` first:
 
-```{r mae}
+```{r}
+#| label: mae
 #| eval: !expr have_token
 for (field in c("HTAN_Biospecimen_ID", "Tumor_Tissue_Type",
     "Site_of_Resection_or_Biopsy", "Histologic_Morphology_Code")) {
@@ -363,7 +380,8 @@ file pooled from several participants, `htan_experiment()` needs the
 
 The analysis below works on the `SpatialExperiment` itself:
 
-```{r get-experiment}
+```{r}
+#| label: get-experiment
 #| eval: !expr have_token
 spe <- MultiAssayExperiment::experiments(mae)[[1]]
 ```
@@ -394,7 +412,8 @@ the code looks for them, and adds the mitochondrial share only if there
 are any. (Genes such as `MTRNR2L12` are nuclear, despite the name, and the
 `^MT-` pattern rightly skips them.)
 
-```{r qc}
+```{r}
+#| label: qc
 #| eval: !expr have_token
 is_mito <- grepl("^MT-", rownames(spe), ignore.case = TRUE)
 sum(is_mito)
@@ -409,7 +428,8 @@ Plotting the metrics on the tissue (image row coordinates increase
 downwards, hence the reversed y axis) shows whether low-quality spots are
 scattered (technical) or form a region (biological):
 
-```{r fig-qc}
+```{r}
+#| label: fig-qc
 #| eval: !expr have_token
 #| fig-height: 4
 #| fig-cap: "Library size of each spot under tissue."
@@ -439,7 +459,8 @@ testing library size and detected genes on the low side only (and the
 mitochondrial share, when there is one, on the high side), and stored the
 verdict in `keep`. The thresholds are kept in the object's metadata:
 
-```{r qc-filter}
+```{r}
+#| label: qc-filter
 #| eval: !expr have_token
 thresholds <- metadata(spe)$qc$thresholds
 unlist(thresholds)
@@ -468,7 +489,8 @@ less safe for spots that mix several cells of different types.
 `normalizeRnaCounts.se()` uses the library sizes as size factors by
 default, scaled to average 1, and adds the `logcounts` assay.
 
-```{r normalise}
+```{r}
+#| label: normalise
 #| eval: !expr have_token
 spe <- normalizeRnaCounts.se(spe)
 summary(spe$sizeFactor)
@@ -483,7 +505,8 @@ genes with the largest residual above that trend are marked in
 removed from the set so that tissue damage does not drive the clustering;
 this panel has none, so here the step does nothing.
 
-```{r hvgs}
+```{r}
+#| label: hvgs
 #| eval: !expr have_token
 spe <- chooseRnaHvgs.se(spe, top = 2000)
 if (any(is_mito)) {
@@ -494,7 +517,8 @@ hvg_stats <- rowData(spe)[rowData(spe)$hvg, ]
 head(rownames(hvg_stats)[order(hvg_stats$residuals, decreasing = TRUE)], 20)
 ```
 
-```{r pca}
+```{r}
+#| label: pca
 #| eval: !expr have_token
 spe <- runPca.se(spe, features = rowData(spe)$hvg, number = 30)
 pca <- metadata(spe)$PCA
@@ -519,7 +543,8 @@ reflect real tissue structure. Spatially aware methods (for example
 BayesSpace or Banksy) smooth over neighbours and would give cleaner
 domains, at the cost of that independent check.
 
-```{r cluster}
+```{r}
+#| label: cluster
 #| eval: !expr have_token
 spe <- clusterGraph.se(spe, method = "leiden", resolution = 0.5,
     more.build.args = list(weight.scheme = "jaccard"),
@@ -527,7 +552,8 @@ spe <- clusterGraph.se(spe, method = "leiden", resolution = 0.5,
 table(spe$cluster)
 ```
 
-```{r fig-clusters}
+```{r}
+#| label: fig-clusters
 #| eval: !expr have_token
 #| fig-height: 4.5
 #| fig-cap: "Expression clusters on the tissue section."
@@ -535,7 +561,8 @@ spot_plot(spe, spe$cluster, "Cluster") +
     guides(colour = guide_legend(override.aes = list(size = 3)))
 ```
 
-```{r fig-umap}
+```{r}
+#| label: fig-umap
 #| eval: !expr have_token
 #| fig-height: 4
 #| fig-cap: "UMAP of spots, coloured by cluster."
@@ -556,7 +583,8 @@ are a better summary than p-values here: the clusters were defined from
 these same expression values, so a test for differences between them is
 circular and its p-values would not mean what they usually do.
 
-```{r markers}
+```{r}
+#| label: markers
 #| eval: !expr have_token
 markers <- scoreMarkers.se(spe, groups = spe$cluster)
 top_markers <- vapply(markers, function(m) {
@@ -576,7 +604,8 @@ pattern easier to see: the number of spots, their median depth, the
 median share of each spot's counts that goes to these families, and the
 mean log-expression of an epithelial and a stromal marker.
 
-```{r cluster-summary}
+```{r}
+#| label: cluster-summary
 #| eval: !expr have_token
 multicopy <- grepl("^(SERF1|USP17L|FAM153|MTRNR2L|TAF11L|GAGE|CT45A)",
     rownames(spe))
@@ -605,7 +634,8 @@ The top of the ranking for the most epithelial cluster (highest mean
 proportion in the cluster, then the mean Cohen's d and AUC against the
 other clusters.
 
-```{r markers-epithelial}
+```{r}
+#| label: markers-epithelial
 #| eval: !expr have_token
 previewMarkers(markers[[epi]], rows = 8, columns = c("mean", "detected",
     d = "cohens.d.mean", auc = "auc.mean"))
@@ -618,7 +648,8 @@ for stroma and `PTPRC` for immune cells. `SERF1A` stands in for the
 multi-copy families. Their expression levels differ widely, so each gene
 is coloured relative to its own maximum:
 
-```{r fig-genes}
+```{r}
+#| label: fig-genes
 #| eval: !expr have_token
 #| fig-height: 6
 #| fig-width: 8
@@ -639,14 +670,16 @@ ggplot(long, aes(x, y, colour = relative)) +
     theme_void()
 ```
 
-```{r fig-cluster-genes}
+```{r}
+#| label: fig-cluster-genes
 #| eval: !expr have_token
 #| fig-height: 4
 #| fig-cap: "Marker expression by cluster."
 plotDots(spe, features = genes, group = "cluster")
 ```
 
-```{r interpretation}
+```{r}
+#| label: interpretation
 #| eval: !expr have_token
 #| include: false
 detected_in <- function(g) mean(counts(spe)[g, ] > 0)
@@ -726,6 +759,7 @@ silently give a different result.
 
 # Session information
 
-```{r session-info}
+```{r}
+#| label: session-info
 sessionInfo()
 ```

@@ -20,7 +20,8 @@ vignette: >
   %\VignetteEncoding{UTF-8}
 ---
 
-```{r setup}
+```{r}
+#| label: setup
 #| include: false
 fmt <- function(x) format(x, big.mark = ",", scientific = FALSE)
 pct <- function(x, digits = 0) paste0(round(100 * x, digits), "%")
@@ -43,14 +44,16 @@ metadata snapshot. The [data model vignette](data-model.html) explains the
 tables used here; this vignette leans on its warnings about duplicates,
 comma-separated lists and inconsistent spelling.
 
-```{r load}
+```{r}
+#| label: load
 library(HTAN)
 library(dplyr)
 library(ggplot2)
 con <- htan_con("r7")
 ```
 
-```{r theme}
+```{r}
+#| label: theme
 #| include: false
 theme_set(theme_minimal(base_size = 11) +
     theme(panel.grid.minor = element_blank(),
@@ -71,7 +74,8 @@ gives the imaging technology of each Level 2 image, which `Component` does
 not record (every multiplexed image, H&E slide and MERFISH run is
 `ImagingLevel2`).
 
-```{r working-tables}
+```{r}
+#| label: working-tables
 imaging_types <- htan_tbl("imaging_level2_metadata", con) |>
     select(HTAN_Data_File_ID, Imaging_Assay_Type) |>
     collect()
@@ -117,7 +121,8 @@ counts below use every level.
 
 # The release at a glance
 
-```{r glance}
+```{r}
+#| label: glance
 #| include: false
 demo <- htan_tbl("clinical_tier1_demographics", con) |> collect()
 bios <- htan_tbl("biospecimen", con) |> collect()
@@ -143,7 +148,8 @@ as done here. (The DCC's 2025 description of Phase 1 counted 2,042
 participants and 8,425 biospecimens, before Release 7 added data from
 another 422 participants.)
 
-```{r access-tiers}
+```{r}
+#| label: access-tiers
 size_by_tier |>
     mutate(share_of_bytes = pct(bytes / sum(bytes)), size = tb(bytes)) |>
     select(access, files, size, share_of_bytes) |>
@@ -159,7 +165,8 @@ images in the CRDC General Commons.
 
 # Centers
 
-```{r centers}
+```{r}
+#| label: centers
 centers <- file_participants |>
     group_by(HTAN_Center) |>
     summarise(participants = n_distinct(HTAN_Participant_ID)) |>
@@ -174,7 +181,8 @@ centers <- file_participants |>
 knitr::kable(centers, format.args = list(big.mark = ","))
 ```
 
-```{r centers-facts}
+```{r}
+#| label: centers-facts
 #| include: false
 top <- centers$HTAN_Center[1]
 dcis_top <- htan_tbl("clinical_tier1_diagnosis", con) |>
@@ -198,7 +206,8 @@ File counts measure how a center packaged its data more than
 how much biology it covers; participants and biospecimens are the better
 measure of scope.
 
-```{r fig-centers}
+```{r}
+#| label: fig-centers
 #| fig-height: 4.5
 #| fig-cap: "Participants with at least one released file, by center."
 ggplot(centers, aes(participants, reorder(HTAN_Center, participants))) +
@@ -219,7 +228,8 @@ mapping (for example "Upper lobe lung" and several soft-tissue sites), so
 terms are matched case-insensitively, the unmapped ones are assigned by
 keyword, and anything left is kept as it is.
 
-```{r organs}
+```{r}
+#| label: organs
 organ_map <- htan_tbl("tissueOrOrganOfOrigin_to_wholeOrgan_mapping", con) |>
     collect() |>
     mutate(key = tolower(Tissue_or_Organ_of_Origin)) |>
@@ -256,7 +266,8 @@ organs |>
     head(15)
 ```
 
-```{r fig-organs}
+```{r}
+#| label: fig-organs
 #| fig-height: 4.5
 #| fig-cap: "Participants with released data, by organ of origin (top 15)."
 organs |>
@@ -280,7 +291,8 @@ diagnosis records can appear under more than one organ.
 
 The most common primary diagnoses, again among participants with data:
 
-```{r diagnoses}
+```{r}
+#| label: diagnoses
 dx |>
     filter(HTAN_Participant_ID %in% with_files) |>
     distinct(HTAN_Participant_ID, Primary_Diagnosis) |>
@@ -299,7 +311,8 @@ specified") terms are ICD-O-3 morphology names.
 
 ## Which assays, at which levels
 
-```{r assay-levels}
+```{r}
+#| label: assay-levels
 assay_levels <- files |>
     mutate(level = if_else(is.na(level), "none", paste("Level", level))) |>
     count(modality, assay, level) |>
@@ -328,7 +341,8 @@ A few patterns matter for analysis:
 The heatmap shows how many participants each center profiled with each
 modality.
 
-```{r fig-heatmap}
+```{r}
+#| label: fig-heatmap
 #| fig-height: 5
 #| fig-width: 8
 #| fig-cap: "Participants profiled with each modality, by center (any level)."
@@ -350,7 +364,8 @@ ggplot(heat, aes(modality, HTAN_Center, fill = n)) +
         panel.grid = element_blank())
 ```
 
-```{r heat-facts}
+```{r}
+#| label: heat-facts
 #| include: false
 centers_with <- function(m) unique(heat$HTAN_Center[heat$modality == m])
 both <- intersect(centers_with("Single-cell sequencing"),
@@ -377,7 +392,8 @@ participants.
 
 ## Multiplexed imaging technologies
 
-```{r imaging-types}
+```{r}
+#| label: imaging-types
 imaging_participants <- file_participants |>
     filter(!is.na(Imaging_Assay_Type)) |>
     group_by(Imaging_Assay_Type) |>
@@ -406,7 +422,8 @@ transcriptomics above.
 Much of HTAN's value is in participants profiled more than one way. Here
 each participant is assigned the set of modalities they have data for:
 
-```{r combinations}
+```{r}
+#| label: combinations
 combos <- file_participants |>
     filter(modality %in% c("Single-cell sequencing", "Spatial transcriptomics",
         "Multiplexed imaging", "H&E", "Bulk sequencing")) |>
@@ -417,7 +434,8 @@ combos <- file_participants |>
 head(combos, 12)
 ```
 
-```{r fig-combinations}
+```{r}
+#| label: fig-combinations
 #| fig-height: 4.5
 #| fig-width: 8
 #| fig-cap: "Participants by the combination of modalities they were profiled with (12 most common combinations)."
@@ -431,7 +449,8 @@ combos |>
     labs(x = "Participants", y = NULL)
 ```
 
-```{r coverage}
+```{r}
+#| label: coverage
 #| include: false
 has <- function(m) {
     unique(file_participants$HTAN_Participant_ID[
@@ -460,7 +479,8 @@ participant count.
 Open Level 3 and 4 files are the starting point for most reanalyses. By
 modality and file type:
 
-```{r analysis-ready}
+```{r}
+#| label: analysis-ready
 files |>
     filter(access == "open-synapse", level %in% c(3, 4)) |>
     count(modality, level, extension) |>
@@ -481,7 +501,8 @@ cases.
 File sizes span several orders of magnitude, which matters when you plan
 downloads:
 
-```{r fig-sizes}
+```{r}
+#| label: fig-sizes
 #| fig-height: 4
 #| fig-cap: "Sizes of open Level 3 and 4 files on Synapse, by modality (log scale)."
 files |>
@@ -496,7 +517,8 @@ files |>
     labs(x = "File size", y = NULL)
 ```
 
-```{r size-summary}
+```{r}
+#| label: size-summary
 files |>
     filter(access == "open-synapse", level %in% c(3, 4), File_Size > 0,
         modality %in% c("Single-cell sequencing", "Spatial transcriptomics",
@@ -516,7 +538,8 @@ samples into one object. `htan_download()` refuses downloads above 20 GB in tota
 
 # Biospecimens
 
-```{r biospecimen-types}
+```{r}
+#| label: biospecimen-types
 norm <- function(x) {
     x <- trimws(x)
     x[is.na(x) | tolower(x) %in% c("not reported", "not recorded",
@@ -529,7 +552,8 @@ bios |>
     knitr::kable(format.args = list(big.mark = ","))
 ```
 
-```{r tissue-facts}
+```{r}
+#| label: tissue-facts
 #| include: false
 tt <- norm(bios$Tumor_Tissue_Type)
 share_primary <- mean(tt == "Primary")
@@ -544,7 +568,8 @@ which is what the study of transitions needs. Normal and normal-adjacent
 tissue are `r pct(share_normal)`, so comparisons against normal tissue
 are possible only for some atlases.
 
-```{r preservation}
+```{r}
+#| label: preservation
 bios |>
     mutate(Preservation_Method = norm(Preservation_Method)) |>
     count(Preservation_Method, sort = TRUE) |>
@@ -564,7 +589,8 @@ largely predicts which assays could have been run on it.
 Tier 1 clinical data are spread over seven tables. Their sizes, and the
 number of participants each covers:
 
-```{r clinical-tables}
+```{r}
+#| label: clinical-tables
 clin <- c("clinical_tier1_demographics", "clinical_tier1_diagnosis",
     "clinical_tier1_therapy", "clinical_tier1_followup",
     "clinical_tier1_exposure", "clinical_tier1_familyhistory",
@@ -581,7 +607,8 @@ bind_rows(lapply(clin, function(t) {
 The tier 3 tables add disease-specific fields for a few hundred
 participants:
 
-```{r tier3}
+```{r}
+#| label: tier3
 htan_tables(con) |>
     filter(grepl("tier3", name)) |>
     select(name, rows)
@@ -593,7 +620,8 @@ A column existing does not mean it was filled in. For each diagnosis field
 this computes the share of records with an informative value: not missing,
 and not "Not Reported", "unknown", "Not Applicable" or a similar code.
 
-```{r completeness}
+```{r}
+#| label: completeness
 uninformative <- c("", "not reported", "not recorded", "unknown",
     "not applicable", "not available", "na", "unknown primary site")
 completeness <- function(table) {
@@ -612,7 +640,8 @@ dx_complete <- completeness("clinical_tier1_diagnosis") |>
 head(dx_complete, 10)
 ```
 
-```{r fig-completeness}
+```{r}
+#| label: fig-completeness
 #| fig-height: 6
 #| fig-cap: "Share of diagnosis records with an informative value, for the 30 best-filled fields."
 dx_complete |>
@@ -624,7 +653,8 @@ dx_complete |>
     labs(x = "Records with an informative value", y = NULL)
 ```
 
-```{r completeness-summary}
+```{r}
+#| label: completeness-summary
 #| include: false
 n_fields <- nrow(dx_complete)
 n_half <- sum(dx_complete$informative >= 0.5)
@@ -640,7 +670,8 @@ in your subset, not in the release as a whole.
 
 ## Demographics and outcome
 
-```{r demographics}
+```{r}
+#| label: demographics
 demo_clean <- demo |>
     filter(HTAN_Participant_ID %in% with_files) |>
     distinct(HTAN_Participant_ID, .keep_all = TRUE) |>
@@ -663,7 +694,8 @@ whether a participant's age "has been modified for compliance reasons",
 and the most common value is exactly 6,573 days (18 years), which looks
 like a floor applied to younger participants.
 
-```{r ages}
+```{r}
+#| label: ages
 ages <- htan_tbl("clinical_tier1_diagnosis", con) |>
     select(HTAN_Participant_ID, HTAN_Center, Age_at_Diagnosis) |>
     collect() |>
@@ -683,7 +715,8 @@ ages |>
     count(HTAN_Center, sort = TRUE)
 ```
 
-```{r fig-age}
+```{r}
+#| label: fig-age
 #| fig-height: 3.5
 #| fig-cap: "Age at diagnosis of participants with released data (zero values removed). The spike at 18 years holds every participant reported at the privacy floor."
 ages |>
@@ -708,7 +741,8 @@ HTAN set out to sample tumours across time. The
 diagnoses, treatments and follow-up on a single timeline (days from the
 index date):
 
-```{r longitudinal}
+```{r}
+#| label: longitudinal
 long <- htan_tbl("phase1_longitudinal_data", con) |> collect()
 count(long, Event_Type, sort = TRUE)
 biopsies <- long |>
@@ -718,7 +752,8 @@ biopsies <- long |>
 table(timepoints = pmin(biopsies$timepoints, 4))
 ```
 
-```{r longitudinal-summary}
+```{r}
+#| label: longitudinal-summary
 #| include: false
 n_multi <- sum(biopsies$timepoints >= 2)
 ```
@@ -747,6 +782,7 @@ this atlas through download and analysis.
 
 # Session information
 
-```{r session-info}
+```{r}
+#| label: session-info
 sessionInfo()
 ```

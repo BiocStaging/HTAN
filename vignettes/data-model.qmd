@@ -20,7 +20,8 @@ vignette: >
   %\VignetteEncoding{UTF-8}
 ---
 
-```{r setup}
+```{r}
+#| label: setup
 #| include: false
 library(HTAN)
 library(dplyr)
@@ -42,7 +43,8 @@ It assumes you have read the [introduction](HTAN.html).
 
 All output below was computed from the Release 7 snapshot:
 
-```{r con}
+```{r}
+#| label: con
 library(HTAN)
 library(dplyr)
 con <- htan_con("r7")
@@ -68,7 +70,8 @@ snapshot keeps those tables as they are. The model itself is in the
 snapshot too, as the `schema` table: one row per attribute, with its
 description, valid values and the component it belongs to.
 
-```{r schema}
+```{r}
+#| label: schema
 schema <- htan_tbl("schema", con) |> collect()
 nrow(schema)
 schema |>
@@ -96,7 +99,8 @@ stay de-identified.
 
 ## The main tables
 
-```{r table-list}
+```{r}
+#| label: table-list
 #| echo: false
 desc <- c(
     clinical_tier1_demographics = "Sex, race, ethnicity, vital status; one row per participant",
@@ -141,7 +145,8 @@ columns of all of them. The table below lists the file components in
 Release 7 with the model's own description of each, from the `schema`
 table:
 
-```{r components}
+```{r}
+#| label: components
 #| echo: false
 key <- function(x) tolower(gsub("[^A-Za-z0-9]", "", x))
 comp <- htan_files(con = con) |>
@@ -181,7 +186,8 @@ biospecimen or a file; the table it appears in does. (Phase 2 adds `B` and
 
 Splitting an ID into its parts is a regular expression:
 
-```{r parse-ids}
+```{r}
+#| label: parse-ids
 parse_htan_id <- function(id) {
     m <- regmatches(id, regexec("^(HTA[0-9]+)_([0-9]+)(?:_(.+))?$", id))
     tibble::tibble(
@@ -199,7 +205,8 @@ parse_htan_id(c("HTA11_7862", "HTA11_7862_2000001011",
 The prefix identifies the center that submitted the data, which you can
 check against the `HTAN_Center` column:
 
-```{r prefix-center}
+```{r}
+#| label: prefix-center
 htan_files(con = con) |>
     mutate(prefix = regexp_extract(HTAN_Data_File_ID, "^HTA[0-9]+")) |>
     count(prefix, HTAN_Center) |>
@@ -221,7 +228,8 @@ used inside dplyr verbs.
 It is tempting to read a file's participant off its ID. That is wrong often
 enough to matter:
 
-```{r prefix-vs-participant}
+```{r}
+#| label: prefix-vs-participant
 f <- htan_files(con = con) |>
     select(HTAN_Data_File_ID, HTAN_Participant_ID, n_participants) |>
     collect() |>
@@ -258,7 +266,8 @@ biospecimen (a block, a section, a cell suspension, an extracted analyte)
 it is the biospecimen it was cut or extracted from. Following those links
 gives the biospecimen's ancestry.
 
-```{r biospecimens}
+```{r}
+#| label: biospecimens
 bs <- htan_tbl("biospecimen", con) |>
     select(HTAN_Biospecimen_ID, HTAN_Parent_ID, Biospecimen_Type,
         Acquisition_Method_Type, Preservation_Method, Tumor_Tissue_Type,
@@ -281,7 +290,8 @@ bs |>
 A small function walks a biospecimen up to its participant. It stops at a
 participant, an unknown ID, or a cycle:
 
-```{r walk-biospecimen}
+```{r}
+#| label: walk-biospecimen
 biospecimen_path <- function(id, bs) {
     parent <- setNames(bs$HTAN_Parent_ID, bs$HTAN_Biospecimen_ID)
     path <- id
@@ -300,7 +310,8 @@ metastasis resected (every biospecimen in the chain has
 `Tumor_Tissue_Type` "Metastatic"); the fresh resection (`_1000`) was divided, snap
 frozen, and divided again before an assay was run on `_1022`:
 
-```{r walk-biospecimen-table}
+```{r}
+#| label: walk-biospecimen-table
 bs |>
     filter(HTAN_Biospecimen_ID %in% biospecimen_path("HTA5_1430_1022", bs)) |>
     arrange(HTAN_Biospecimen_ID) |>
@@ -336,7 +347,8 @@ DCC did it once, for every file, and published the result as
 files, and one of the biospecimens it was derived from, with the
 participant attached. Its columns:
 
-```{r prov-columns}
+```{r}
+#| label: prov-columns
 htan_columns("id_provenance", con) |>
     select(column, description) |>
     mutate(description = substr(description, 1, 70))
@@ -351,7 +363,8 @@ The terms used for biospecimens come from the HTAN manual
 - the **biospecimen path** is the chain from originating to assayed,
   comma-separated.
 
-```{r prov-size}
+```{r}
+#| label: prov-size
 prov <- htan_tbl("id_provenance", con)
 prov |>
     summarise(
@@ -366,7 +379,8 @@ prov |>
 A file has more than one row whenever it has several parents or several
 biospecimens. The counts per file:
 
-```{r prov-multiplicity}
+```{r}
+#| label: prov-multiplicity
 per_file <- prov |>
     group_by(HTAN_Data_File_ID) |>
     summarise(
@@ -403,7 +417,8 @@ one row per (query file, related file), with `depth` counting generations
 
 Start with a Level 4 Visium object from the Vanderbilt colorectal atlas:
 
-```{r visium-file}
+```{r}
+#| label: visium-file
 visium_id <- "HTA11_7862_200000101134111"
 htan_files(HTAN_Data_File_ID == visium_id, con = con) |>
     select(Component, Filename, File_Size, HTAN_Participant_ID,
@@ -414,7 +429,8 @@ htan_files(HTAN_Data_File_ID == visium_id, con = con) |>
 
 Its ancestors:
 
-```{r visium-lineage}
+```{r}
+#| label: visium-lineage
 htan_lineage(visium_id, con = con) |>
     arrange(depth, related_file_id) |>
     collect() |>
@@ -427,7 +443,8 @@ spot positions) to the processed object (Level 4). Every file in it was
 measured on the same biospecimen. That biospecimen leads to the
 participant:
 
-```{r visium-biospecimen}
+```{r}
+#| label: visium-biospecimen
 biospecimen_path("HTA11_7862_2000001011", bs)
 bs |>
     filter(HTAN_Biospecimen_ID == "HTA11_7862_2000001011") |>
@@ -440,7 +457,8 @@ colon. Its `Histologic_Morphology_Code` (not shown above) is `M82110`,
 the ICD-O-3 code for tubular adenoma, the common precancerous colorectal
 polyp. The participant's diagnosis record is uninformative:
 
-```{r visium-diagnosis}
+```{r}
+#| label: visium-diagnosis
 htan_tbl("clinical_tier1_diagnosis", con) |>
     filter(HTAN_Participant_ID == "HTA11_7862") |>
     select(Primary_Diagnosis, Tissue_or_Organ_of_Origin, Age_at_Diagnosis) |>
@@ -455,7 +473,8 @@ histology, and the diagnosis table, built around cancer diagnoses, says
 
 The assay table records the Visium object's parents in a single field:
 
-```{r visium-assay-table}
+```{r}
+#| label: visium-assay-table
 htan_tbl("10xvisium_spatialtranscriptomics_scRNAseq_level4_metadata",
     con) |>
     filter(HTAN_Data_File_ID == visium_id) |>
@@ -464,7 +483,8 @@ htan_tbl("10xvisium_spatialtranscriptomics_scRNAseq_level4_metadata",
 
 while `id_provenance` gives them one row each:
 
-```{r visium-prov-rows}
+```{r}
+#| label: visium-prov-rows
 prov |>
     filter(HTAN_Data_File_ID == visium_id) |>
     select(HTAN_Parent_Data_File_ID, HTAN_Assayed_Biospecimen_ID) |>
@@ -473,7 +493,8 @@ prov |>
 
 The comma-separated form is common:
 
-```{r comma-parents}
+```{r}
+#| label: comma-parents
 count_commas <- function(table) {
     htan_tbl(table, con) |>
         summarise(
@@ -499,7 +520,8 @@ the field first; in DuckDB, `unnest(string_split(x, ','))` does it.
 Walking down from a Level 1 file shows everything computed from it. This
 is a single-cell RNA-seq FASTQ from Washington University:
 
-```{r descendants}
+```{r}
+#| label: descendants
 htan_lineage("HTA12_251_1000", direction = "descendants", con = con) |>
     arrange(depth, related_file_id) |>
     select(depth, related_file_id, Component) |>
@@ -518,7 +540,8 @@ graph, not a tree, and the assay can change along a path.
 Imaging follows the same pattern. A Level 4 cell-by-marker table from an
 Orion whole-slide image (Harvard Medical School):
 
-```{r imaging-lineage}
+```{r}
+#| label: imaging-lineage
 htan_lineage("HTA7_1000_1003", con = con) |>
     arrange(depth) |>
     collect() |>
@@ -535,7 +558,8 @@ Some single-cell objects pool cells from several participants. This Level 4
 AnnData file from the Dana-Farber melanoma atlas is named for one
 participant, but `id_provenance` attributes it to four:
 
-```{r pooled}
+```{r}
+#| label: pooled
 pooled_id <- "HTA5_0000_1003255"
 htan_files(HTAN_Data_File_ID == pooled_id, con = con) |>
     select(Filename, n_participants, HTAN_Participant_ID) |>
@@ -589,7 +613,8 @@ stops at both.
 **Duplicate records.** Some participants and biospecimens appear more than
 once:
 
-```{r duplicates}
+```{r}
+#| label: duplicates
 dup_count <- function(table, id) {
     htan_tbl(table, con) |>
         summarise(rows = n(), distinct_ids = n_distinct(.data[[id]])) |>
@@ -614,7 +639,8 @@ participant, ordered by ID.
 `"unknown"`, `"Not Applicable"` and sometimes `"0"`. Normalise case and
 decide what counts as missing before you tabulate:
 
-```{r missingness}
+```{r}
+#| label: missingness
 htan_tbl("biospecimen", con) |>
     count(Tumor_Tissue_Type) |>
     arrange(desc(n)) |>
@@ -629,7 +655,8 @@ Vanderbilt diagnosis record above, `Age_at_Diagnosis` is `"0"` while every
 other field is "Not Reported", which looks like a placeholder, not an
 age.
 
-```{r text-numbers}
+```{r}
+#| label: text-numbers
 htan_tbl("clinical_tier1_diagnosis", con) |>
     head(1) |>
     select(Age_at_Diagnosis, Days_to_Last_Follow_up, Year_of_Diagnosis) |>
@@ -645,7 +672,8 @@ from the newest table.
 **Files without provenance.** Some files have no `id_provenance` rows, so
 no participant:
 
-```{r no-provenance}
+```{r}
+#| label: no-provenance
 htan_files(n_participants == 0, con = con) |>
     count(Component) |>
     arrange(desc(n)) |>
@@ -673,6 +701,7 @@ one file from query to analysis.
 
 # Session information
 
-```{r session-info}
+```{r}
+#| label: session-info
 sessionInfo()
 ```
