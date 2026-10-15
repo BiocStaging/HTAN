@@ -55,10 +55,15 @@ jobs:
         bioc: [devel, RELEASE_3_23]
     container:
       image: bioconductor/bioconductor_docker:${{ matrix.bioc }}
+    # Job-level env reaches every step, including those that run inside the
+    # container. SYNAPSE_AUTH_TOKEN (a read-only token) lets the vignettes'
+    # Synapse chunks run; it is empty on fork PRs, and they then show their
+    # code unevaluated.
     env:
       R_LIBS_USER: /__w/_temp/Library
       _R_CHECK_FORCE_SUGGESTS_: "false"
       R_KEEP_PKG_SOURCE: "yes"
+      SYNAPSE_AUTH_TOKEN: ${{ secrets.SYNAPSE_AUTH_TOKEN }}
     steps:
       - uses: actions/checkout@v7
 
@@ -135,6 +140,7 @@ jobs:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
       _R_CHECK_FORCE_SUGGESTS_: "false"
       R_KEEP_PKG_SOURCE: "yes"
+      SYNAPSE_AUTH_TOKEN: ${{ secrets.SYNAPSE_AUTH_TOKEN }}
     steps:
       - uses: actions/checkout@v7
 

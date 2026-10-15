@@ -17,8 +17,12 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # The articles are the live vignettes. SYNAPSE_AUTH_TOKEN (read-only)
+    # lets the analysis article's Synapse chunks run; fork PRs get no secret,
+    # and those chunks then show their code unevaluated.
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      SYNAPSE_AUTH_TOKEN: ${{ secrets.SYNAPSE_AUTH_TOKEN }}
     steps:
       - uses: actions/checkout@v7
 
@@ -28,7 +32,7 @@ jobs:
         with:
           use-public-rspm: true
 
-      # Vignettes are moving to Quarto.
+      # The vignettes are Quarto documents.
       - uses: quarto-dev/quarto-actions/setup@v2
 
       - uses: r-lib/actions/setup-r-dependencies@v2
