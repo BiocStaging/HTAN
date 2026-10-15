@@ -13,6 +13,7 @@ knitr:
     comment: "#>"
     collapse: true
     message: false
+    fig.retina: 1
 vignette: >
   %\VignetteIndexEntry{The HTAN data model, identifiers and lineage}
   %\VignetteEngine{quarto::html}

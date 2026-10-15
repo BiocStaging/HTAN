@@ -13,6 +13,7 @@ knitr:
     comment: "#>"
     collapse: true
     message: false
+    fig.retina: 1
 vignette: >
   %\VignetteIndexEntry{Introduction to HTAN}
   %\VignetteEngine{quarto::html}
