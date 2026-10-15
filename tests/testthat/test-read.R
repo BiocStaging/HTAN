@@ -100,6 +100,88 @@ test_that(".h5ad reads to SCE, and to SPE with a spatial embedding", {
         c(4, 5, 6))
 })
 
+h5ad_fixture <- function(name) {
+    system.file("extdata", "h5ad", name, package = "HTAN", mustWork = TRUE)
+}
+
+test_that("pre-0.8 .h5ad files are read with the rhdf5 fallback", {
+    skip_if_not_installed("rhdf5")
+    expect_message(spe <- read_htan(h5ad_fixture("legacy_visium.h5ad")),
+        class = "htan_message_legacy_h5ad")
+    expect_s4_class(spe, "SpatialExperiment")
+    expect_equal(dim(spe), c(5L, 4L))
+    expect_identical(SummarizedExperiment::assayNames(spe),
+        c("counts", "dense", "X"))
+    x <- SummarizedExperiment::assay(spe, "X")
+    expect_s4_class(x, "dgCMatrix")
+    ## AnnData is obs x var; the fixture's spot 1 has 3 counts of SAMD11.
+    expect_equal(x["SAMD11", "AAACAAGTATCTCCCA-1"], 3)
+    expect_equal(x["PERM1", "AAACAGAGCGACTCCT-1"], 7)
+    expect_equal(as.matrix(SummarizedExperiment::assay(spe, "counts")),
+        as.matrix(x) * 2)
+    expect_equal(SummarizedExperiment::assay(spe, "dense"), as.matrix(x) / 2)
+    cd <- SummarizedExperiment::colData(spe)
+    expect_identical(levels(cd$cluster), c("tumor", "stroma"))
+    expect_identical(as.character(cd$cluster),
+        c("tumor", "stroma", NA, "tumor"))
+    expect_identical(cd$in_tissue, c(1L, 1L, 0L, 1L))
+    rd <- SummarizedExperiment::rowData(spe)
+    expect_identical(as.character(unique(rd$feature_types)),
+        "Gene Expression")
+    expect_identical(rd$highly_variable, c(TRUE, FALSE, TRUE, FALSE, TRUE))
+    expect_true("Feature.Counts.in.Spots.Under.Tissue" %in% names(rd))
+    expect_equal(unname(SpatialExperiment::spatialCoords(spe)[1L, ]),
+        c(996, 1376))
+    expect_equal(dim(SingleCellExperiment::reducedDim(spe, "X_pca")),
+        c(4L, 3L))
+})
+
+test_that("the legacy reader matches anndataR on the converted file", {
+    skip_if_not_installed("rhdf5")
+    skip_if_not_installed("anndataR")
+    old <- suppressMessages(read_htan(h5ad_fixture("legacy_visium.h5ad")))
+    new <- read_htan(h5ad_fixture("modern_visium.h5ad"))
+    expect_identical(class(old), class(new))
+    expect_identical(dimnames(old), dimnames(new))
+    expect_identical(SummarizedExperiment::assayNames(old),
+        SummarizedExperiment::assayNames(new))
+    for (a in SummarizedExperiment::assayNames(new)) {
+        expect_equal(SummarizedExperiment::assay(old, a),
+            SummarizedExperiment::assay(new, a))
+    }
+    expect_equal(SummarizedExperiment::colData(old),
+        SummarizedExperiment::colData(new))
+    expect_equal(SummarizedExperiment::rowData(old),
+        SummarizedExperiment::rowData(new))
+    expect_equal(SpatialExperiment::spatialCoords(old),
+        SpatialExperiment::spatialCoords(new))
+    expect_equal(SingleCellExperiment::reducedDims(old),
+        SingleCellExperiment::reducedDims(new))
+})
+
+test_that("duplicated obs and var names are made unique, not dropped", {
+    skip_if_not_installed("rhdf5")
+    skip_if_not_installed("anndataR")
+    path <- h5ad_fixture("duplicate_names.h5ad")
+    msgs <- character()
+    expect_no_warning(spe <- withCallingHandlers(read_htan(path),
+        htan_message_duplicate_names = function(m) {
+            msgs <<- c(msgs, conditionMessage(m))
+            invokeRestart("muffleMessage")
+        }))
+    expect_length(msgs, 2L)
+    expect_identical(rownames(spe),
+        c("SAMD11", "TBCE", "NOC2L", "TBCE.1", "HSPA14", "HSPA14.1"))
+    expect_identical(colnames(spe)[4L], "AAACAAGTATCTCCCA-1.1")
+    rd <- SummarizedExperiment::rowData(spe)
+    expect_identical(rd$gene_ids, sprintf("ENSG%011d", 0:5))
+    expect_s3_class(rd$feature_types, "factor")
+    expect_identical(SummarizedExperiment::colData(spe)$in_tissue,
+        c(1L, 1L, 0L, 1L))
+    expect_identical(rownames(SpatialExperiment::spatialCoords(spe)),
+        colnames(spe))
+})
+
 test_that("images return their path; unknown formats error", {
     tif <- withr::local_tempfile(fileext = ".ome.tiff")
     writeBin(as.raw(1:4), tif)

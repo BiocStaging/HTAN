@@ -6,7 +6,11 @@
 #' \describe{
 #'   \item{`.h5ad`}{`anndataR::read_h5ad()` to a `SingleCellExperiment`; a
 #'     `spatial` embedding becomes `spatialCoords()` of a
-#'     `SpatialExperiment`.}
+#'     `SpatialExperiment`. Files in the pre-0.8 AnnData layout, which
+#'     anndataR rejects and many HTAN centers wrote, are read with rhdf5
+#'     instead: `X`, `layers`, `obs`, `var` and numeric `obsm` arrays, but
+#'     not `uns`. Duplicated `obs` or `var` names are made unique with
+#'     [make.unique()], with a message.}
 #'   \item{`.rds`, `.rda`, `.RData`}{Read, then: `SingleCellExperiment` and
 #'     other `SummarizedExperiment`s pass through; a Seurat object is
 #'     converted with SeuratObject (counts, data, metadata, reductions, and
@@ -46,6 +50,12 @@
 #' path <- tempfile(fileext = ".csv")
 #' write.csv(cells, path, row.names = FALSE)
 #' read_htan(path)
+#'
+#' ## A tiny Visium file in the pre-0.8 AnnData layout
+#' if (requireNamespace("rhdf5", quietly = TRUE)) {
+#'     read_htan(system.file("extdata", "h5ad", "legacy_visium.h5ad",
+#'         package = "HTAN"))
+#' }
 #'
 #' @export
 read_htan <- function(x, coords = NULL, ...) {
@@ -103,9 +113,237 @@ read_htan <- function(x, coords = NULL, ...) {
 ## ---- single cell ---------------------------------------------------------
 
 .read_h5ad <- function(path, ...) {
+    .need("rhdf5", ".h5ad files")
+    file <- basename(path)
+    if (.with_h5(path, .h5ad_is_legacy)) {
+        rlang::inform(
+            c(sprintf(paste("%s is in the pre-0.8 AnnData layout; reading",
+                "it with read_htan()'s fallback reader."), file),
+                i = "`uns` is not read; `...` is ignored."),
+            class = "htan_message_legacy_h5ad"
+        )
+        sce <- .with_h5(path, .read_legacy_h5ad, file = file)
+        return(.spatial_from_reduced_dim(sce))
+    }
     .need("anndataR", ".h5ad files")
-    sce <- anndataR::read_h5ad(path, as = "SingleCellExperiment", ...)
+    ## anndataR drops a dataframe whose index has duplicates (with a
+    ## warning), leaving empty rowData/colData. Read those ourselves.
+    dup <- .with_h5(path, function(fid) vapply(c(obs = "obs", var = "var"),
+        function(frame) anyDuplicated(.h5ad_index(fid, frame)) > 0L,
+        logical(1)))
+    args <- list(...)
+    if (dup[["obs"]]) args$colData_mapping <- FALSE
+    if (dup[["var"]]) args$rowData_mapping <- FALSE
+    sce <- do.call(anndataR::read_h5ad,
+        c(list(path, as = "SingleCellExperiment"), args))
+    if (dup[["obs"]]) {
+        cd <- .with_h5(path, .h5ad_frame, frame = "obs", file = file)
+        colnames(sce) <- rownames(cd)
+        SummarizedExperiment::colData(sce) <- cd
+    }
+    if (dup[["var"]]) {
+        rd <- .with_h5(path, .h5ad_frame, frame = "var", file = file)
+        rownames(sce) <- rownames(rd)
+        SummarizedExperiment::rowData(sce) <- rd
+    }
     .spatial_from_reduced_dim(sce)
+}
+
+## Open an HDF5 file read-only for the duration of `fun(fid, ...)`. Handles
+## are not held across anndataR calls, which warns about open handles.
+.with_h5 <- function(path, fun, ...) {
+    fid <- rhdf5::H5Fopen(path, flags = "H5F_ACC_RDONLY", native = FALSE)
+    on.exit(rhdf5::H5Fclose(fid), add = TRUE)
+    fun(fid, ...)
+}
+
+## ---- legacy (pre-0.8) h5ad ----------------------------------------------
+##
+## anndata < 0.8 wrote no `encoding-type`/`encoding-version` on the root
+## group (anndataR's own validity test), and stored categoricals as integer
+## codes whose `categories` attribute is an object reference into
+## `<frame>/__categories/<column>`. We look the categories up by name, so no
+## reference is dereferenced. Checked against one real HTAN file
+## (HTA11_7862_200000101134111, Vanderbilt Visium, anndata 0.7): X, obs,
+## var, obsm/spatial. Sparse `layers`, dense matrices, `h5sparse_*`
+## attributes (anndata < 0.7) and boolean columns are unverified against
+## HTAN data.
+
+.h5ad_is_legacy <- function(fid) {
+    attrs <- rhdf5::h5readAttributes(fid, "/")
+    !all(c("encoding-type", "encoding-version") %in% names(attrs))
+}
+
+## Children of an HDF5 group: object types ("H5I_GROUP", "H5I_DATASET")
+## named by child.
+.h5_children <- function(fid, name) {
+    if (!rhdf5::H5Lexists(fid, name)) {
+        return(character())
+    }
+    gid <- rhdf5::H5Gopen(fid, name)
+    on.exit(rhdf5::H5Gclose(gid), add = TRUE)
+    ls <- rhdf5::h5ls(gid, recursive = FALSE, datasetinfo = FALSE)
+    stats::setNames(as.character(ls$otype), ls$name)
+}
+
+.h5_is_group <- function(fid, name) {
+    oid <- rhdf5::H5Oopen(fid, name)
+    on.exit(rhdf5::H5Oclose(oid), add = TRUE)
+    identical(rhdf5::H5Iget_type(oid), "H5I_GROUP")
+}
+
+## A dataset as an R vector or array; HDF5 enum booleans become logical.
+.h5_read <- function(fid, name) {
+    x <- rhdf5::h5read(fid, name)
+    if (is.factor(x) && all(levels(x) %in% c("FALSE", "TRUE"))) {
+        d <- dim(x)
+        x <- as.logical(as.character(x))
+        if (length(d) > 1L) dim(x) <- d
+    }
+    if (length(dim(x)) <= 1L) as.vector(x) else x
+}
+
+.h5ad_index <- function(fid, frame) {
+    attrs <- rhdf5::h5readAttributes(fid, frame)
+    as.character(.h5_read(fid, paste(frame, attrs[["_index"]] %||% "_index",
+        sep = "/")))
+}
+
+## An obs/var dataframe group, legacy or current, as a DataFrame. Column
+## names go through DataFrame()'s check.names, as in anndataR, so both
+## layouts give the same names.
+.h5ad_frame <- function(fid, frame, file) {
+    if (!.h5_is_group(fid, frame)) {
+        rlang::abort(
+            c(sprintf("`%s` in %s is not a dataframe group.", frame, file),
+                i = "Files from anndata < 0.7 are not supported yet."),
+            class = c("htan_error_unsupported_format", "htan_error")
+        )
+    }
+    attrs <- rhdf5::h5readAttributes(fid, frame)
+    index <- .unique_names(.h5ad_index(fid, frame), frame, file)
+    cols <- as.character(attrs[["column-order"]])
+    data <- lapply(cols, function(col) .h5ad_column(fid, frame, col, file))
+    names(data) <- cols
+    data <- Filter(Negate(is.null), data)
+    if (!length(data)) {
+        return(S4Vectors::DataFrame(row.names = index))
+    }
+    S4Vectors::DataFrame(data, row.names = index)
+}
+
+.unique_names <- function(x, frame, file) {
+    dup <- unique(x[duplicated(x)])
+    if (!length(dup)) {
+        return(x)
+    }
+    rlang::inform(
+        c(sprintf("%s: %s names are not unique; made them unique.", file,
+            frame),
+            i = sprintf("Duplicated (%d): %s%s.", length(dup),
+                paste(utils::head(dup, 5L), collapse = ", "),
+                if (length(dup) > 5L) ", ..." else ""),
+            i = "make.unique() appends .1, .2, ... to later copies."),
+        class = "htan_message_duplicate_names"
+    )
+    make.unique(x)
+}
+
+.h5ad_column <- function(fid, frame, col, file) {
+    name <- paste(frame, col, sep = "/")
+    if (.h5_is_group(fid, name)) {
+        kids <- names(.h5_children(fid, name))
+        if (all(c("codes", "categories") %in% kids)) {
+            ordered <- rhdf5::h5readAttributes(fid, name)[["ordered"]]
+            return(.h5ad_factor(.h5_read(fid, paste0(name, "/codes")),
+                .h5_read(fid, paste0(name, "/categories")), ordered))
+        }
+        if (all(c("values", "mask") %in% kids)) {
+            x <- .h5_read(fid, paste0(name, "/values"))
+            x[as.logical(.h5_read(fid, paste0(name, "/mask")))] <- NA
+            return(x)
+        }
+        rlang::warn(sprintf("%s: skipping %s column '%s' (unknown encoding).",
+            file, frame, col), class = "htan_warning_h5ad_column")
+        return(NULL)
+    }
+    x <- .h5_read(fid, name)
+    cats <- paste(frame, "__categories", col, sep = "/")
+    if (rhdf5::H5Lexists(fid, cats)) {
+        ordered <- rhdf5::h5readAttributes(fid, cats)[["ordered"]]
+        return(.h5ad_factor(x, .h5_read(fid, cats), ordered))
+    }
+    x
+}
+
+## Codes are 0-based; -1 is missing.
+.h5ad_factor <- function(codes, levels, ordered) {
+    codes <- as.integer(codes)
+    codes[codes < 0L] <- NA_integer_
+    levels <- as.character(levels)
+    factor(levels[codes + 1L], levels = levels,
+        ordered = isTRUE(as.logical(ordered)))
+}
+
+## An AnnData matrix (obs x var) as a Bioconductor one (var x obs). CSR over
+## obs is CSC over the transpose, so it maps to a dgCMatrix directly.
+.h5ad_matrix <- function(fid, name, dimnames, file) {
+    if (!.h5_is_group(fid, name)) {
+        ## rhdf5 reverses HDF5's row-major dimensions: already var x obs.
+        m <- .h5_read(fid, name)
+    } else {
+        attrs <- rhdf5::h5readAttributes(fid, name)
+        type <- attrs[["encoding-type"]] %||%
+            paste0(attrs[["h5sparse_format"]], "_matrix")
+        shape <- as.integer(attrs[["shape"]] %||% attrs[["h5sparse_shape"]])
+        part <- function(p) as.vector(rhdf5::h5read(fid, paste(name, p,
+            sep = "/")))
+        x <- as.numeric(part("data"))
+        ind <- as.integer(part("indices"))
+        ptr <- as.integer(part("indptr"))
+        m <- switch(type,
+            csr_matrix = Matrix::sparseMatrix(i = ind, p = ptr, x = x,
+                dims = rev(shape), index1 = FALSE),
+            csc_matrix = Matrix::sparseMatrix(j = ind, p = ptr, x = x,
+                dims = rev(shape), index1 = FALSE),
+            rlang::abort(sprintf("%s: cannot read `%s` (encoding '%s').",
+                file, name, type),
+                class = c("htan_error_unsupported_format", "htan_error"))
+        )
+    }
+    if (!identical(dim(m), lengths(dimnames, use.names = FALSE))) {
+        rlang::abort(sprintf("%s: `%s` does not match obs x var.", file,
+            name), class = c("htan_error_unsupported_format", "htan_error"))
+    }
+    dimnames(m) <- dimnames
+    m
+}
+
+.read_legacy_h5ad <- function(fid, file) {
+    .need("Matrix", "pre-0.8 .h5ad files")
+    obs <- .h5ad_frame(fid, "obs", file)
+    var <- .h5ad_frame(fid, "var", file)
+    dn <- list(rownames(var), rownames(obs))
+    layers <- .h5_children(fid, "layers")
+    assays <- lapply(names(layers), function(nm)
+        .h5ad_matrix(fid, paste0("layers/", nm), dn, file))
+    names(assays) <- names(layers)
+    ## anndataR puts X after the layers.
+    assays$X <- .h5ad_matrix(fid, "X", dn, file)
+    obsm <- .h5_children(fid, "obsm")
+    rd <- lapply(names(obsm)[obsm == "H5I_DATASET"], function(nm) {
+        m <- .h5_read(fid, paste0("obsm/", nm))
+        if (!is.numeric(m) || length(dim(m)) != 2L) {
+            return(NULL)
+        }
+        m <- t(m)
+        rownames(m) <- rownames(obs)
+        m
+    })
+    names(rd) <- names(obsm)[obsm == "H5I_DATASET"]
+    SingleCellExperiment::SingleCellExperiment(assays = assays,
+        colData = obs, rowData = var,
+        reducedDims = Filter(Negate(is.null), rd))
 }
 
 .read_10x_h5 <- function(path, ...) {

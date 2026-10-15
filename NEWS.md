@@ -19,6 +19,13 @@
   or Seurat conversion via SeuratObject), 10x `.h5` (TENxIO), Space Ranger
   `outs/` (VisiumIO) and imaging Level 4 cell tables (to
   SpatialExperiment); images return their path.
+* `read_htan()` reads `.h5ad` files in the pre-0.8 AnnData layout, which
+  anndataR rejects (122 of 212 open HTAN `.h5ad` files in r7), with an
+  rhdf5 fallback reader: `X`, `layers`, `obs`, `var` and `obsm`, with
+  `obsm/spatial` as `spatialCoords()`. rhdf5 is now in Suggests (#23).
+* `read_htan()` keeps `obs`/`var` when their names are duplicated, making
+  them unique with `make.unique()` and a message. anndataR left
+  `rowData`/`colData` empty for such files (#23).
 * `htan_experiment()` assembles a MultiAssayExperiment with participant
   colData from the clinical tables.
 * Four Quarto vignettes, precomputed against the r7 snapshot
