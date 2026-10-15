@@ -45,7 +45,6 @@ Imports:
 Suggests:
     anndataR,
     BiocIO,
-    bluster,
     ggplot2,
     knitr,
     Matrix,
@@ -53,12 +52,10 @@ Suggests:
     rhdf5,
     scales,
     scater,
-    scran,
-    scuttle,
+    scrapper,
     SeuratObject,
     TENxIO,
     tidyr,
-    uwot,
     testthat (>= 3.0.0),
     VisiumIO,
     withr
