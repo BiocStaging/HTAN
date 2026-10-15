@@ -5,13 +5,27 @@ format:
   html:
     toc: true
     toc-depth: 3
+    fig-width: 7
+    fig-height: 4.5
+knitr:
+  opts_chunk:
+    comment: "#>"
+    collapse: true
+    message: false
 vignette: >
   %\VignetteIndexEntry{The HTAN data model, identifiers and lineage}
   %\VignetteEngine{quarto::html}
   %\VignetteEncoding{UTF-8}
 ---
 
-
+```{r setup}
+#| include: false
+library(HTAN)
+library(dplyr)
+fmt <- function(x) format(x, big.mark = ",", scientific = FALSE)
+pct <- function(x, digits = 1) paste0(format(round(100 * x, digits),
+    nsmall = digits), "%")
+```
 
 HTAN's metadata answer three questions about every data file: what assay
 and processing step produced it, which biospecimen it was measured on, and
@@ -22,8 +36,7 @@ It assumes you have read the [introduction](HTAN.html).
 
 All output below was computed from the Release 7 snapshot:
 
-
-``` r
+```{r con}
 library(HTAN)
 library(dplyr)
 con <- htan_con("r7")
@@ -49,23 +62,13 @@ snapshot keeps those tables as they are. The model itself is in the
 snapshot too, as the `schema` table: one row per attribute, with its
 description, valid values and the component it belongs to.
 
-
-``` r
+```{r schema}
 schema <- htan_tbl("schema", con) |> collect()
 nrow(schema)
-#> [1] 1072
 schema |>
     filter(Attribute == "HTAN Parent Data File ID") |>
     select(Attribute, Parent, Description) |>
     as.list()
-#> $Attribute
-#> [1] "HTAN Parent Data File ID"
-#> 
-#> $Parent
-#> [1] "File"
-#> 
-#> $Description
-#> [1] "HTAN Data File Identifier indicating the file(s) from which these files were derived"
 ```
 
 ## Clinical data
@@ -87,27 +90,32 @@ stay de-identified.
 
 ## The main tables
 
-
-
-|table                                       |    rows|description                                                             |
-|:-------------------------------------------|-------:|:-----------------------------------------------------------------------|
-|clinical_tier1_demographics                 |   2,805|Sex, race, ethnicity, vital status; one row per participant             |
-|clinical_tier1_diagnosis                    |   2,300|Primary diagnosis, site, stage, grade; one or more rows per participant |
-|clinical_tier1_therapy                      |   3,337|Treatments, with days from index                                        |
-|clinical_tier1_followup                     |   2,167|Follow-up visits, progression, comorbidities                            |
-|clinical_tier1_exposure                     |   2,004|Smoking, alcohol and other exposures                                    |
-|clinical_tier1_familyhistory                |   2,284|Family history of cancer                                                |
-|clinical_tier1_moleculartest                |   4,700|Clinical molecular tests (e.g. receptor status, mutations)              |
-|clinical_tier2                              |     359|HTAN disease-agnostic clinical extensions                               |
-|biospecimen                                 |  13,105|Every biospecimen and its parent, type, site, preservation              |
-|id_provenance                               | 464,304|One row per file-parent-biospecimen link: the lineage table             |
-|gc_drs_map                                  |  66,891|HTAN file ID to CRDC General Commons DRS URI                            |
-|imaging_channel_metadata                    |  23,972|Channel (antibody/marker) lists for imaging files                       |
-|tissueOrOrganOfOrigin_to_wholeOrgan_mapping |     332|Fine-grained site of origin to whole organ                              |
-|phase1_longitudinal_data                    |   7,620|Per-participant timeline of biopsies, treatment and vital status        |
-|schema                                      |   1,072|The Phase 1 data model: attributes, descriptions, valid values          |
-
-
+```{r table-list}
+#| echo: false
+desc <- c(
+    clinical_tier1_demographics = "Sex, race, ethnicity, vital status; one row per participant",
+    clinical_tier1_diagnosis = "Primary diagnosis, site, stage, grade; one or more rows per participant",
+    clinical_tier1_therapy = "Treatments, with days from index",
+    clinical_tier1_followup = "Follow-up visits, progression, comorbidities",
+    clinical_tier1_exposure = "Smoking, alcohol and other exposures",
+    clinical_tier1_familyhistory = "Family history of cancer",
+    clinical_tier1_moleculartest = "Clinical molecular tests (e.g. receptor status, mutations)",
+    clinical_tier2 = "HTAN disease-agnostic clinical extensions",
+    biospecimen = "Every biospecimen and its parent, type, site, preservation",
+    id_provenance = "One row per file-parent-biospecimen link: the lineage table",
+    gc_drs_map = "HTAN file ID to CRDC General Commons DRS URI",
+    imaging_channel_metadata = "Channel (antibody/marker) lists for imaging files",
+    tissueOrOrganOfOrigin_to_wholeOrgan_mapping = "Fine-grained site of origin to whole organ",
+    phase1_longitudinal_data = "Per-participant timeline of biopsies, treatment and vital status",
+    schema = "The Phase 1 data model: attributes, descriptions, valid values"
+)
+htan_tables(con) |>
+    filter(name %in% names(desc)) |>
+    mutate(description = desc[name]) |>
+    select(table = name, rows, description) |>
+    arrange(match(table, names(desc))) |>
+    knitr::kable(format.args = list(big.mark = ","))
+```
 
 The other tables are assay metadata, one per component, named after the
 assay and level (`scRNAseq_level4_metadata`, `imaging_level2_metadata`,
@@ -127,61 +135,21 @@ columns of all of them. The table below lists the file components in
 Release 7 with the model's own description of each, from the `schema`
 table:
 
-
-
-|Component                                      | level|  files|Description                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-|:----------------------------------------------|-----:|------:|:--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-|10XGenomicsXeniumISSExperiment                 |    NA|     33|All data pertaining to the 10X Genomics Xenium In-Situ Hybridization experiment                                                                                                                                                                                                                                                                                                                                                                                      |
-|10xVisiumSpatialTranscriptomics-AuxiliaryFiles |    NA|    465|Auxiliary data associated with spot/slide analysis (aligned Images, quality control files, etc)  from Spatial Transcriptomics.                                                                                                                                                                                                                                                                                                                                       |
-|10xVisiumSpatialTranscriptomics-RNA-seqLevel1  |     1|    794|Files contain raw RNA-seq data associated with spot/slide data.                                                                                                                                                                                                                                                                                                                                                                                                      |
-|10xVisiumSpatialTranscriptomics-RNA-seqLevel2  |     2|    223|Alignment workflows downstream of Spatial Transcriptomics RNA-seq Level 1.                                                                                                                                                                                                                                                                                                                                                                                           |
-|10xVisiumSpatialTranscriptomics-RNA-seqLevel3  |     3|  1,264|Processed data files based on Spatial Transcriptomics RNA-seq Level 2 and Spatial Transcriptomics Auxiliary files.                                                                                                                                                                                                                                                                                                                                                   |
-|10xVisiumSpatialTranscriptomics-RNA-seqLevel4  |     4|    175|Processed data files based on Spatial Transcriptomics RNA-seq Level 3.                                                                                                                                                                                                                                                                                                                                                                                               |
-|BulkMethylation-seqLevel1                      |     1|     80|Raw data for bulk methylation sequencing, such as FASTQs and unaligned BAMs                                                                                                                                                                                                                                                                                                                                                                                          |
-|BulkMethylation-seqLevel2                      |     2|     51|Aligned primary data for bulk methylation sequencing, such as gene expression matrix files, VCFs, etc.                                                                                                                                                                                                                                                                                                                                                               |
-|BulkRNA-seqLevel1                              |     1|  4,134|Bulk RNA-seq [EFO_0003738]                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-|BulkRNA-seqLevel2                              |     2|  1,922|Bulk RNA-seq alignment protocol description                                                                                                                                                                                                                                                                                                                                                                                                                          |
-|BulkRNA-seqLevel3                              |     3|    640|Bulk RNA-seq gene expression matrices                                                                                                                                                                                                                                                                                                                                                                                                                                |
-|BulkWESLevel1                                  |     1|  7,033|Bulk Whole Exome Sequencing raw files                                                                                                                                                                                                                                                                                                                                                                                                                                |
-|BulkWESLevel2                                  |     2|  1,613|Bulk Whole Exome Sequencing aligned files and QC                                                                                                                                                                                                                                                                                                                                                                                                                     |
-|BulkWESLevel3                                  |     3|  1,014|Bulk Whole Exome Sequencing called variants                                                                                                                                                                                                                                                                                                                                                                                                                          |
-|ElectronMicroscopyLevel1                       |     1| 74,252|Raw electron microscopy data as one TIFF file per plane for a 3D image stack or per tile for a 2D large area montage                                                                                                                                                                                                                                                                                                                                                 |
-|ElectronMicroscopyLevel2                       |     2| 36,073|Processed electron microscopy data as one OME-TIFF image per plane or montage                                                                                                                                                                                                                                                                                                                                                                                        |
-|ElectronMicroscopyLevel3                       |     3|     32|Segmented electron microscopy data as .am or .tiff formats                                                                                                                                                                                                                                                                                                                                                                                                           |
-|ElectronMicroscopyLevel4                       |     4|     41|Movies or other derived files from electron microscopy data                                                                                                                                                                                                                                                                                                                                                                                                          |
-|ExSeqMinimal                                   |    NA| 21,153|Minimal metadata for the ExSeq assay                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-|HI-C-seqLevel1                                 |     1|     66|Unaligned sequence data                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-|HI-C-seqLevel2                                 |     2|     34|Aligned read pairs, contact matrix                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-|HI-C-seqLevel3                                 |     3|      2|Summary data for the HI-C-seq assay.                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-|ImagingLevel1                                  |     1|     16|Raw imaging data                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-|ImagingLevel2                                  |     2| 27,079|Raw and pre-processed image data                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-|ImagingLevel3Segmentation                      |     3|  4,628|Object segmentations                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-|ImagingLevel4                                  |     4|  3,539|Derived imaging data: Object-by-feature array                                                                                                                                                                                                                                                                                                                                                                                                                        |
-|MassSpectrometryLevel1                         |     1|  1,187|Mass Spectrometry derived data that includes proteomics, metabolomics, and lipidomics, level 1                                                                                                                                                                                                                                                                                                                                                                       |
-|MassSpectrometryLevel3                         |     3|     28|Mass Spectrometry derived data that includes proteomics, metabolomics, and lipidomics, level 3                                                                                                                                                                                                                                                                                                                                                                       |
-|MassSpectrometryLevel4                         |     4|     28|Mass Spectrometry derived data that includes proteomics, metabolomics, and lipidomics, level 4                                                                                                                                                                                                                                                                                                                                                                       |
-|NanoStringGeoMxDSPSpatialTranscriptomicsLevel1 |     1|    239|Files contain raw data output from the NanoString GeoMx DSP Pipeline. These can include RCC or DCC Files.                                                                                                                                                                                                                                                                                                                                                            |
-|NanoStringGeoMxDSPSpatialTranscriptomicsLevel3 |     3|     53|Files contain processed data from the NanoString GeoMx DSP Pipeline. This level depends on GeoMx Level 1 and Imaging Level 2.                                                                                                                                                                                                                                                                                                                                        |
-|OtherAssay                                     |    NA|    514|Metadata applying to any assay without standard descriptors. Can be used as a placeholder for minimal amount of metadata until the assay descriptors are standardized                                                                                                                                                                                                                                                                                                |
-|RPPALevel2                                     |     2|     26|Array based protemics. Each dilution curve of spot intensities is fitted using the monotone increasing B-spline model in the SuperCurve R package. This fits a single curve using all the samples on a slide with the signal intensity as the response variable and the dilution steps as independent variables. The fitted curve is plotted with the signal intensities on the y-axis and the log2-concentration of proteins on the x-axis for diagnostic purposes. |
-|RPPALevel3                                     |     3|     26|Level 3 Reverse Phase Protein Array (RPPA) data contains intra-batch normalized intensities.                                                                                                                                                                                                                                                                                                                                                                         |
-|RPPALevel4                                     |     4|     26|Level 4 Reverse Phase Protein Array (RPPA) data contains intra-batch corrected intensities.                                                                                                                                                                                                                                                                                                                                                                          |
-|SRRSImagingLevel2                              |     2|    143|SRRS-specific HTAN raw and pre-processed image data                                                                                                                                                                                                                                                                                                                                                                                                                  |
-|ScATAC-seqLevel1                               |     1|  2,548|scATAC-seq files containing sequence read information, with or without alignment, as FASTQ or BAM files                                                                                                                                                                                                                                                                                                                                                              |
-|ScATAC-seqLevel2                               |     2|    344|scATAC-seq files containing aligned sequence data, as a BAM file                                                                                                                                                                                                                                                                                                                                                                                                     |
-|ScATAC-seqLevel3                               |     3|  1,006|Processed data files containing peak information for cells                                                                                                                                                                                                                                                                                                                                                                                                           |
-|ScATAC-seqLevel4                               |     4|    218|Data represents the relationships between cells derived from Level 3 expression data and shown as tSNE or UMAP coordinates per cell, plus all other cell-specific meta information (e.g., cell type)                                                                                                                                                                                                                                                                 |
-|ScDNA-seqLevel1                                |     1|  1,774|Single-cell DNA-seq                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-|ScDNA-seqLevel2                                |     2|  1,271|Alignment workflows downstream of scDNA-seq Level 1                                                                                                                                                                                                                                                                                                                                                                                                                  |
-|ScRNA-seqLevel1                                |     1| 15,201|Single-cell RNA-seq [EFO_0008913]                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-|ScRNA-seqLevel2                                |     2|  5,755|Alignment workflows downstream of scRNA-seq Level 1                                                                                                                                                                                                                                                                                                                                                                                                                  |
-|ScRNA-seqLevel3                                |     3|  3,705|Gene and Isoform expression files                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-|ScRNA-seqLevel4                                |     4|    857|Data represents the relationships between cells derived from Level 3 expression data and shown as tSNE or UMAP coordinates per cell, plus all other cell-specific meta information (e.g., cell type)                                                                                                                                                                                                                                                                 |
-|Slide-seqLevel1                                |     1|      7|Raw sequencing files for the Slide-seq assay.                                                                                                                                                                                                                                                                                                                                                                                                                        |
-|Slide-seqLevel2                                |     2|     47|Aligned sequencing files and QC for the Slide-seq assay.                                                                                                                                                                                                                                                                                                                                                                                                             |
-|Slide-seqLevel3                                |     3|    329|Gene matrices with features and barcodes for Slide-seq as well as spatial information (bead location files).                                                                                                                                                                                                                                                                                                                                                         |
-
-
+```{r components}
+#| echo: false
+key <- function(x) tolower(gsub("[^A-Za-z0-9]", "", x))
+comp <- htan_files(con = con) |>
+    count(Component, assay, level) |>
+    collect()
+schema |>
+    mutate(key = key(Attribute)) |>
+    select(key, Description) |>
+    distinct(key, .keep_all = TRUE) |>
+    right_join(mutate(comp, key = key(Component)), by = "key") |>
+    arrange(assay, level) |>
+    select(Component, level, files = n, Description) |>
+    knitr::kable(format.args = list(big.mark = ","))
+```
 
 # Identifiers
 
@@ -207,8 +175,7 @@ biospecimen or a file; the table it appears in does. (Phase 2 adds `B` and
 
 Splitting an ID into its parts is a regular expression:
 
-
-``` r
+```{r parse-ids}
 parse_htan_id <- function(id) {
     m <- regmatches(id, regexec("^(HTA[0-9]+)_([0-9]+)(?:_(.+))?$", id))
     tibble::tibble(
@@ -221,44 +188,17 @@ parse_htan_id <- function(id) {
 }
 parse_htan_id(c("HTA11_7862", "HTA11_7862_2000001011",
     "HTA11_7862_200000101134111", "HTA5_0000_1003255"))
-#> # A tibble: 4 × 4
-#>   id                         center participant rest             
-#>   <chr>                      <chr>  <chr>       <chr>            
-#> 1 HTA11_7862                 HTA11  HTA11_7862  ""               
-#> 2 HTA11_7862_2000001011      HTA11  HTA11_7862  "2000001011"     
-#> 3 HTA11_7862_200000101134111 HTA11  HTA11_7862  "200000101134111"
-#> 4 HTA5_0000_1003255          HTA5   HTA5_0000   "1003255"
 ```
 
 The prefix identifies the center that submitted the data, which you can
 check against the `HTAN_Center` column:
 
-
-``` r
+```{r prefix-center}
 htan_files(con = con) |>
     mutate(prefix = regexp_extract(HTAN_Data_File_ID, "^HTA[0-9]+")) |>
     count(prefix, HTAN_Center) |>
     arrange(as.integer(substr(prefix, 4L, 6L))) |>
     collect()
-#> # A tibble: 16 × 3
-#>    prefix HTAN_Center           n
-#>    <chr>  <chr>             <dbl>
-#>  1 HTA1   HTAN HTAPP        41626
-#>  2 HTA2   HTAN BU              87
-#>  3 HTA3   HTAN BU            5232
-#>  4 HTA4   HTAN CHOP          4739
-#>  5 HTA5   HTAN DFCI         17560
-#>  6 HTA5   HTAN SRRS            11
-#>  7 HTA6   HTAN Duke          7035
-#>  8 HTA7   HTAN HMS           1690
-#>  9 HTA8   HTAN MSK           5381
-#> 10 HTA9   HTAN OHSU        116657
-#> 11 HTA10  HTAN Stanford      6321
-#> 12 HTA11  HTAN Vanderbilt    3340
-#> 13 HTA12  HTAN WUSTL         7176
-#> 14 HTA13  HTAN TNP SARDANA    301
-#> 15 HTA14  HTAN TNP - TMA     4281
-#> 16 HTA15  HTAN SRRS           251
 ```
 
 Two quirks show up. Files with the PCAPP prefix `HTA2` were submitted
@@ -275,8 +215,7 @@ used inside dplyr verbs.
 It is tempting to read a file's participant off its ID. That is wrong often
 enough to matter:
 
-
-``` r
+```{r prefix-vs-participant}
 f <- htan_files(con = con) |>
     select(HTAN_Data_File_ID, HTAN_Participant_ID, n_participants) |>
     collect() |>
@@ -285,40 +224,20 @@ f <- htan_files(con = con) |>
 single <- filter(f, n_participants == 1)
 mismatch <- filter(single, id_participant != HTAN_Participant_ID)
 nrow(mismatch)
-#> [1] 2101
 mismatch |>
     count(prefix = sub("_.*", "", HTAN_Data_File_ID), sort = TRUE)
-#> # A tibble: 10 × 2
-#>    prefix     n
-#>    <chr>  <int>
-#>  1 HTA4    1508
-#>  2 HTA14    190
-#>  3 HTA2      87
-#>  4 HTA12     74
-#>  5 HTA6      55
-#>  6 HTA5      52
-#>  7 HTA9      48
-#>  8 HTA3      42
-#>  9 HTA10     32
-#> 10 HTA1      13
 head(mismatch, 3)
-#> # A tibble: 3 × 4
-#>   HTAN_Data_File_ID HTAN_Participant_ID n_participants id_participant
-#>   <chr>             <chr>                        <dbl> <chr>         
-#> 1 HTA4_1001_1894    HTA4_1017                        1 HTA4_1001     
-#> 2 HTA4_1001_2044    HTA4_1010                        1 HTA4_1001     
-#> 3 HTA4_2003_26691   HTA4_2008                        1 HTA4_2003
 ```
 
-Of the 217,475 files that come from one participant,
-2,101 (1.0%) carry
+Of the `r fmt(nrow(single))` files that come from one participant,
+`r fmt(nrow(mismatch))` (`r pct(nrow(mismatch) / nrow(single))`) carry
 another participant's number in their own ID, most of them from
-HTA4
+`r names(sort(table(sub("_.*", "", mismatch$HTAN_Data_File_ID)), decreasing = TRUE))[1]`
 (CHOP).
 In addition,
-1,236 files have the
+`r fmt(sum(grepl("^HTA[0-9]+_0000_", f$HTAN_Data_File_ID)))` files have the
 pooled participant number `0000`, and
-1,942 files are attributed to more than one
+`r fmt(sum(f$n_participants > 1))` files are attributed to more than one
 participant. The participant of a file is whatever `id_provenance` says,
 and `htan_files()` takes it from there.
 
@@ -327,14 +246,13 @@ and `htan_files()` takes it from there.
 ## Biospecimens
 
 The `biospecimen` table holds
-13,105 rows. Each has an `HTAN_Parent_ID`: for an originating biospecimen (the
+`r fmt(pull(count(htan_tbl("biospecimen", con))))` rows. Each has an `HTAN_Parent_ID`: for an originating biospecimen (the
 biopsy or resection itself) that is the participant; for a derived
 biospecimen (a block, a section, a cell suspension, an extracted analyte)
 it is the biospecimen it was cut or extracted from. Following those links
 gives the biospecimen's ancestry.
 
-
-``` r
+```{r biospecimens}
 bs <- htan_tbl("biospecimen", con) |>
     select(HTAN_Biospecimen_ID, HTAN_Parent_ID, Biospecimen_Type,
         Acquisition_Method_Type, Preservation_Method, Tumor_Tissue_Type,
@@ -352,20 +270,12 @@ bs |>
         .default = "an ID in neither table"
     )) |>
     count(parent_is)
-#> # A tibble: 4 × 2
-#>   parent_is                  n
-#>   <chr>                  <int>
-#> 1 a biospecimen           6807
-#> 2 a participant           6004
-#> 3 an ID in neither table   288
-#> 4 itself                     6
 ```
 
 A small function walks a biospecimen up to its participant. It stops at a
 participant, an unknown ID, or a cycle:
 
-
-``` r
+```{r walk-biospecimen}
 biospecimen_path <- function(id, bs) {
     parent <- setNames(bs$HTAN_Parent_ID, bs$HTAN_Biospecimen_ID)
     path <- id
@@ -376,8 +286,6 @@ biospecimen_path <- function(id, bs) {
     path
 }
 biospecimen_path("HTA5_1430_1022", bs)
-#> [1] "HTA5_1430_1022" "HTA5_1430_1020" "HTA5_1430_1001" "HTA5_1430_1000"
-#> [5] "HTA5_1430"
 ```
 
 Here is that path with each biospecimen's annotation. Participant
@@ -386,20 +294,12 @@ metastasis resected (every biospecimen in the chain has
 `Tumor_Tissue_Type` "Metastatic"); the fresh resection (`_1000`) was divided, snap
 frozen, and divided again before an assay was run on `_1022`:
 
-
-``` r
+```{r walk-biospecimen-table}
 bs |>
     filter(HTAN_Biospecimen_ID %in% biospecimen_path("HTA5_1430_1022", bs)) |>
     arrange(HTAN_Biospecimen_ID) |>
     select(HTAN_Biospecimen_ID, HTAN_Parent_ID, Preservation_Method,
         Site = Site_of_Resection_or_Biopsy)
-#> # A tibble: 4 × 4
-#>   HTAN_Biospecimen_ID HTAN_Parent_ID Preservation_Method Site                   
-#>   <chr>               <chr>          <chr>               <chr>                  
-#> 1 HTA5_1430_1000      HTA5_1430      Fresh               Lymph nodes of axilla …
-#> 2 HTA5_1430_1001      HTA5_1430_1000 Snap Frozen         Lymph nodes of axilla …
-#> 3 HTA5_1430_1020      HTA5_1430_1001 Snap Frozen         Lymph nodes of axilla …
-#> 4 HTA5_1430_1022      HTA5_1430_1020 Snap Frozen         Lymph nodes of axilla …
 ```
 
 Annotations such as tissue type and site are often repeated on every
@@ -430,26 +330,10 @@ DCC did it once, for every file, and published the result as
 files, and one of the biospecimens it was derived from, with the
 participant attached. Its columns:
 
-
-``` r
+```{r prov-columns}
 htan_columns("id_provenance", con) |>
     select(column, description) |>
     mutate(description = substr(description, 1, 70))
-#> # A tibble: 12 × 2
-#>    column                          description                                  
-#>    <chr>                           <chr>                                        
-#>  1 HTAN_Data_File_ID               "Self-identifier for this data file - HTAN I…
-#>  2 Filename                        "Name of a file"                             
-#>  3 entityId                        "Synapse ID of entity"                       
-#>  4 Component                       "Category of metadata (e.g. Diagnosis, Biosp…
-#>  5 Data_Release                    "Inclusion in HTAN Data Release e.g. Release…
-#>  6 GC_Release                      "Released to CRDC’s General Commons (GC) as …
-#>  7 HTAN_Center                     "Name of HTAN Center e.g. HTAN HTAPP"        
-#>  8 HTAN_Assayed_Biospecimen_ID     "HTAN ID of the biospecimen directly assayed…
-#>  9 HTAN_Parent_Data_File_ID        "HTAN Data File Identifier indicating the fi…
-#> 10 HTAN_Originating_Biospecimen_ID "HTAN ID of the biopsied or resected biospec…
-#> 11 HTAN_Participant_ID             "HTAN ID associated with a patient based on …
-#> 12 Biospecimen_Path                "Full Biospecimen ancestry path from HTAN_As…
 ```
 
 The terms used for biospecimens come from the HTAN manual
@@ -461,8 +345,7 @@ The terms used for biospecimens come from the HTAN manual
 - the **biospecimen path** is the chain from originating to assayed,
   comma-separated.
 
-
-``` r
+```{r prov-size}
 prov <- htan_tbl("id_provenance", con)
 prov |>
     summarise(
@@ -472,17 +355,12 @@ prov |>
         biospecimens = n_distinct(HTAN_Assayed_Biospecimen_ID)
     ) |>
     collect()
-#> # A tibble: 1 × 4
-#>     rows  files participants biospecimens
-#>    <dbl>  <dbl>        <dbl>        <dbl>
-#> 1 464304 221167         2416        10895
 ```
 
 A file has more than one row whenever it has several parents or several
 biospecimens. The counts per file:
 
-
-``` r
+```{r prov-multiplicity}
 per_file <- prov |>
     group_by(HTAN_Data_File_ID) |>
     summarise(
@@ -501,15 +379,6 @@ tibble::tibble(
     biospecimens = as.vector(table(bucket(per_file$biospecimens))),
     participants = as.vector(table(bucket(per_file$participants)))
 )
-#> # A tibble: 6 × 4
-#>   count  parents biospecimens participants
-#>   <chr>    <int>        <int>        <int>
-#> 1 0            0            0            0
-#> 2 1       210451       219178       219224
-#> 3 2         8048           98           87
-#> 4 3-10      2031          707         1520
-#> 5 11-100     245         1175          331
-#> 6 >100       392            9            5
 ```
 
 Most files have one parent, one biospecimen and one participant. A file
@@ -528,43 +397,22 @@ one row per (query file, related file), with `depth` counting generations
 
 Start with a Level 4 Visium object from the Vanderbilt colorectal atlas:
 
-
-``` r
+```{r visium-file}
 visium_id <- "HTA11_7862_200000101134111"
 htan_files(HTAN_Data_File_ID == visium_id, con = con) |>
     select(Component, Filename, File_Size, HTAN_Participant_ID,
         HTAN_Assayed_Biospecimen_ID, access) |>
     collect() |>
     glimpse()
-#> Rows: 1
-#> Columns: 6
-#> $ Component                   <chr> "10xVisiumSpatialTranscriptomics-RNA-seqLe…
-#> $ Filename                    <chr> "visium_level_4/8270_AS_1_unfiltered.h5ad"
-#> $ File_Size                   <dbl> 13075894
-#> $ HTAN_Participant_ID         <chr> "HTA11_7862"
-#> $ HTAN_Assayed_Biospecimen_ID <chr> "HTA11_7862_2000001011"
-#> $ access                      <chr> "open-synapse"
 ```
 
 Its ancestors:
 
-
-``` r
+```{r visium-lineage}
 htan_lineage(visium_id, con = con) |>
     arrange(depth, related_file_id) |>
     collect() |>
     transmute(depth, related_file_id, file = basename(Filename))
-#> # A tibble: 8 × 3
-#>   depth related_file_id            file                                
-#>   <int> <chr>                      <chr>                               
-#> 1    -3 HTA11_7862_200000101131111 8270-AS-0001_S1_L005_R1_001.fastq.gz
-#> 2    -3 HTA11_7862_200000101131121 8270-AS-0001_S1_L005_R2_001.fastq.gz
-#> 3    -2 HTA11_7862_200000101132111 8270_AS_1_possorted_genome_bam.bam  
-#> 4    -1 HTA11_7862_200000101133111 8270_AS_1_barcodes.tsv.gz           
-#> 5    -1 HTA11_7862_200000101133121 8270_AS_1_features.tsv.gz           
-#> 6    -1 HTA11_7862_200000101133131 8270_AS_1_matrix.mtx.gz             
-#> 7    -1 HTA11_7862_200000101133141 8270_AS_1_tissue_positions_list.csv 
-#> 8     0 HTA11_7862_200000101134111 8270_AS_1_unfiltered.h5ad
 ```
 
 The chain is FASTQ (Level 1) to aligned BAM (Level 2) to the four pieces of
@@ -573,22 +421,12 @@ spot positions) to the processed object (Level 4). Every file in it was
 measured on the same biospecimen. That biospecimen leads to the
 participant:
 
-
-``` r
+```{r visium-biospecimen}
 biospecimen_path("HTA11_7862_2000001011", bs)
-#> [1] "HTA11_7862_2000001011" "HTA11_7862"
 bs |>
     filter(HTAN_Biospecimen_ID == "HTA11_7862_2000001011") |>
     select(-HTAN_Parent_ID) |>
     glimpse()
-#> Rows: 1
-#> Columns: 6
-#> $ HTAN_Biospecimen_ID         <chr> "HTA11_7862_2000001011"
-#> $ Biospecimen_Type            <chr> "Tissue Biospecimen Type"
-#> $ Acquisition_Method_Type     <chr> "Biopsy"
-#> $ Preservation_Method         <chr> "Fresh"
-#> $ Tumor_Tissue_Type           <chr> "Premalignant"
-#> $ Site_of_Resection_or_Biopsy <chr> "Sigmoid colon"
 ```
 
 The biospecimen is a fresh biopsy of a premalignant lesion of the sigmoid
@@ -596,16 +434,11 @@ colon. Its `Histologic_Morphology_Code` (not shown above) is `M82110`,
 the ICD-O-3 code for tubular adenoma, the common precancerous colorectal
 polyp. The participant's diagnosis record is uninformative:
 
-
-``` r
+```{r visium-diagnosis}
 htan_tbl("clinical_tier1_diagnosis", con) |>
     filter(HTAN_Participant_ID == "HTA11_7862") |>
     select(Primary_Diagnosis, Tissue_or_Organ_of_Origin, Age_at_Diagnosis) |>
     collect()
-#> # A tibble: 1 × 3
-#>   Primary_Diagnosis Tissue_or_Organ_of_Origin Age_at_Diagnosis
-#>   <chr>             <chr>                     <chr>           
-#> 1 Not Reported      Not Reported              0
 ```
 
 This is common in the pre-cancer atlases: the biospecimen carries the
@@ -616,36 +449,25 @@ histology, and the diagnosis table, built around cancer diagnoses, says
 
 The assay table records the Visium object's parents in a single field:
 
-
-``` r
+```{r visium-assay-table}
 htan_tbl("10xvisium_spatialtranscriptomics_scRNAseq_level4_metadata",
     con) |>
     filter(HTAN_Data_File_ID == visium_id) |>
     pull(HTAN_Parent_Data_File_ID)
-#> [1] "HTA11_7862_200000101133111,HTA11_7862_200000101133121,HTA11_7862_200000101133131,HTA11_7862_200000101133141"
 ```
 
 while `id_provenance` gives them one row each:
 
-
-``` r
+```{r visium-prov-rows}
 prov |>
     filter(HTAN_Data_File_ID == visium_id) |>
     select(HTAN_Parent_Data_File_ID, HTAN_Assayed_Biospecimen_ID) |>
     collect()
-#> # A tibble: 4 × 2
-#>   HTAN_Parent_Data_File_ID   HTAN_Assayed_Biospecimen_ID
-#>   <chr>                      <chr>                      
-#> 1 HTA11_7862_200000101133111 HTA11_7862_2000001011      
-#> 2 HTA11_7862_200000101133121 HTA11_7862_2000001011      
-#> 3 HTA11_7862_200000101133131 HTA11_7862_2000001011      
-#> 4 HTA11_7862_200000101133141 HTA11_7862_2000001011
 ```
 
 The comma-separated form is common:
 
-
-``` r
+```{r comma-parents}
 count_commas <- function(table) {
     htan_tbl(table, con) |>
         summarise(
@@ -660,13 +482,6 @@ bind_rows(lapply(c("scRNAseq_level3_metadata", "scRNAseq_level4_metadata",
     "imaging_level4_metadata",
     "10xvisium_spatialtranscriptomics_scRNAseq_level4_metadata"),
     count_commas))
-#> # A tibble: 4 × 3
-#>   table                                                    files several_parents
-#>   <chr>                                                    <dbl>           <dbl>
-#> 1 scRNAseq_level3_metadata                                  3705              57
-#> 2 scRNAseq_level4_metadata                                   857             604
-#> 3 imaging_level4_metadata                                   3539             383
-#> 4 10xvisium_spatialtranscriptomics_scRNAseq_level4_metada…   175              93
 ```
 
 A filter such as `HTAN_Parent_Data_File_ID == "HTA11_7862_200000101133111"`
@@ -678,23 +493,11 @@ the field first; in DuckDB, `unnest(string_split(x, ','))` does it.
 Walking down from a Level 1 file shows everything computed from it. This
 is a single-cell RNA-seq FASTQ from Washington University:
 
-
-``` r
+```{r descendants}
 htan_lineage("HTA12_251_1000", direction = "descendants", con = con) |>
     arrange(depth, related_file_id) |>
     select(depth, related_file_id, Component) |>
     collect()
-#> # A tibble: 8 × 3
-#>   depth related_file_id Component       
-#>   <int> <chr>           <chr>           
-#> 1     0 HTA12_251_1000  ScRNA-seqLevel1 
-#> 2     1 HTA12_251_2000  ScRNA-seqLevel2 
-#> 3     2 HTA12_251_3000  ScATAC-seqLevel3
-#> 4     2 HTA12_251_3001  ScATAC-seqLevel3
-#> 5     2 HTA12_251_3002  ScATAC-seqLevel3
-#> 6     2 HTA12_251_3003  ScATAC-seqLevel3
-#> 7     3 HTA12_251_4000  ScRNA-seqLevel4 
-#> 8     3 HTA12_251_4001  ScATAC-seqLevel4
 ```
 
 The descendants mix the two assays: the scRNA-seq alignment is recorded as
@@ -709,18 +512,11 @@ graph, not a tree, and the assay can change along a path.
 Imaging follows the same pattern. A Level 4 cell-by-marker table from an
 Orion whole-slide image (Harvard Medical School):
 
-
-``` r
+```{r imaging-lineage}
 htan_lineage("HTA7_1000_1003", con = con) |>
     arrange(depth) |>
     collect() |>
     transmute(depth, related_file_id, Component, file = basename(Filename))
-#> # A tibble: 3 × 4
-#>   depth related_file_id Component                 file                          
-#>   <int> <chr>           <chr>                     <chr>                         
-#> 1    -2 HTA7_1000_1000  ImagingLevel2             LSP15300_P54_A31_C100_HMS_Ori…
-#> 2    -1 HTA7_1000_1002  ImagingLevel3Segmentation LSP15300-CRC68-mask.ome.tif   
-#> 3     0 HTA7_1000_1003  ImagingLevel4             LSP15300-CRC68.csv
 ```
 
 The table was computed from a segmentation mask (Level 3), which was
@@ -733,30 +529,17 @@ Some single-cell objects pool cells from several participants. This Level 4
 AnnData file from the Dana-Farber melanoma atlas is named for one
 participant, but `id_provenance` attributes it to four:
 
-
-``` r
+```{r pooled}
 pooled_id <- "HTA5_0000_1003255"
 htan_files(HTAN_Data_File_ID == pooled_id, con = con) |>
     select(Filename, n_participants, HTAN_Participant_ID) |>
     collect() |>
     glimpse()
-#> Rows: 1
-#> Columns: 3
-#> $ Filename            <chr> "HTAN DFCI/single_cell_RNAseq_level_4_melanoma/all…
-#> $ n_participants      <dbl> 4
-#> $ HTAN_Participant_ID <chr> "HTA5_1470,HTA5_1536,HTA5_1765,HTA5_1950"
 prov |>
     filter(HTAN_Data_File_ID == pooled_id) |>
     distinct(HTAN_Parent_Data_File_ID, HTAN_Participant_ID,
         HTAN_Assayed_Biospecimen_ID) |>
     collect()
-#> # A tibble: 4 × 3
-#>   HTAN_Parent_Data_File_ID HTAN_Participant_ID HTAN_Assayed_Biospecimen_ID
-#>   <chr>                    <chr>               <chr>                      
-#> 1 HTA5_0000_1003231        HTA5_1765           HTA5_1765_1004             
-#> 2 HTA5_0000_1003231        HTA5_1536           HTA5_1536_1004             
-#> 3 HTA5_0000_1003231        HTA5_1470           HTA5_1470_1004             
-#> 4 HTA5_0000_1003231        HTA5_1950           HTA5_1950_1004
 ```
 
 The attribution comes from its parent, a Level 3 file that was itself
@@ -787,7 +570,7 @@ and many participants (see the multiplicity table above). Joining
 aggregate to one row per file before joining, as `htan_files()` does.
 
 **Participants inferred from IDs.** As shown above,
-1.0% of single-participant files carry
+`r pct(nrow(mismatch) / nrow(single))` of single-participant files carry
 another participant's number in their ID. Take participants from
 `id_provenance`.
 
@@ -800,8 +583,7 @@ stops at both.
 **Duplicate records.** Some participants and biospecimens appear more than
 once:
 
-
-``` r
+```{r duplicates}
 dup_count <- function(table, id) {
     htan_tbl(table, con) |>
         summarise(rows = n(), distinct_ids = n_distinct(.data[[id]])) |>
@@ -813,12 +595,6 @@ bind_rows(
     dup_count("clinical_tier1_diagnosis", "HTAN_Participant_ID"),
     dup_count("biospecimen", "HTAN_Biospecimen_ID")
 )
-#> # A tibble: 3 × 3
-#>   table                        rows distinct_ids
-#>   <chr>                       <dbl>        <dbl>
-#> 1 clinical_tier1_demographics  2805         2797
-#> 2 clinical_tier1_diagnosis     2300         2273
-#> 3 biospecimen                 13105        13095
 ```
 
 A participant can legitimately have several diagnoses, but duplicated
@@ -832,30 +608,11 @@ participant, ordered by ID.
 `"unknown"`, `"Not Applicable"` and sometimes `"0"`. Normalise case and
 decide what counts as missing before you tabulate:
 
-
-``` r
+```{r missingness}
 htan_tbl("biospecimen", con) |>
     count(Tumor_Tissue_Type) |>
     arrange(desc(n)) |>
     collect()
-#> # A tibble: 15 × 2
-#>    Tumor_Tissue_Type            n
-#>    <chr>                    <dbl>
-#>  1 Primary                   5520
-#>  2 Metastatic                2340
-#>  3 Not Otherwise Specified   2259
-#>  4 Premalignant               894
-#>  5 Normal                     399
-#>  6 Atypia - hyperplasia       343
-#>  7 Normal adjacent            343
-#>  8 <NA>                       273
-#>  9 Premalignant - in situ     237
-#> 10 Recurrent                  230
-#> 11 Additional Primary         101
-#> 12 primary                     92
-#> 13 Post therapy neoadjuvant    58
-#> 14 Local recurrence            13
-#> 15 Normal distant               3
 ```
 
 **Numbers stored as text.** Clinical fields such as `Age_at_Diagnosis` and
@@ -866,15 +623,12 @@ Vanderbilt diagnosis record above, `Age_at_Diagnosis` is `"0"` while every
 other field is "Not Reported", which looks like a placeholder, not an
 age.
 
-
-``` r
+```{r text-numbers}
 htan_tbl("clinical_tier1_diagnosis", con) |>
     head(1) |>
     select(Age_at_Diagnosis, Days_to_Last_Follow_up, Year_of_Diagnosis) |>
     collect() |>
     vapply(class, "")
-#>       Age_at_Diagnosis Days_to_Last_Follow_up      Year_of_Diagnosis 
-#>            "character"            "character"            "character"
 ```
 
 **The same file in several tables.** A few files appear in more than one
@@ -885,23 +639,11 @@ from the newest table.
 **Files without provenance.** Some files have no `id_provenance` rows, so
 no participant:
 
-
-``` r
+```{r no-provenance}
 htan_files(n_participants == 0, con = con) |>
     count(Component) |>
     arrange(desc(n)) |>
     collect()
-#> # A tibble: 8 × 2
-#>   Component                    n
-#>   <chr>                    <dbl>
-#> 1 ElectronMicroscopyLevel2  1461
-#> 2 OtherAssay                 392
-#> 3 BulkWESLevel3              294
-#> 4 ScRNA-seqLevel4            100
-#> 5 ImagingLevel1               16
-#> 6 ScRNA-seqLevel3              4
-#> 7 BulkWESLevel2                3
-#> 8 ImagingLevel2                1
 ```
 
 # Summary
@@ -925,81 +667,6 @@ one file from query to analysis.
 
 # Session information
 
-
-``` r
+```{r session-info}
 sessionInfo()
-#> R version 4.6.0 (2026-04-24)
-#> Platform: aarch64-apple-darwin23
-#> Running under: macOS Tahoe 26.7.1
-#> 
-#> Matrix products: default
-#> BLAS:   /Library/Frameworks/R.framework/Versions/4.6/Resources/lib/libRblas.0.dylib 
-#> LAPACK: /Library/Frameworks/R.framework/Versions/4.6/Resources/lib/libRlapack.dylib;  LAPACK version 3.12.1
-#> 
-#> locale:
-#> [1] en_US.UTF-8/en_US.UTF-8/en_US.UTF-8/C/en_US.UTF-8/en_US.UTF-8
-#> 
-#> time zone: America/New_York
-#> tzcode source: internal
-#> 
-#> attached base packages:
-#> [1] stats4    stats     graphics  grDevices utils     datasets  methods  
-#> [8] base     
-#> 
-#> other attached packages:
-#>  [1] dplyr_1.2.1                 bluster_1.23.0             
-#>  [3] scater_1.41.2               ggplot2_4.0.3              
-#>  [5] scran_1.41.1                scuttle_1.23.1             
-#>  [7] SpatialExperiment_1.23.0    SingleCellExperiment_1.35.2
-#>  [9] SummarizedExperiment_1.43.0 Biobase_2.73.2             
-#> [11] GenomicRanges_1.65.1        Seqinfo_1.3.0              
-#> [13] IRanges_2.47.2              S4Vectors_0.51.6           
-#> [15] BiocGenerics_0.59.12        generics_0.1.4             
-#> [17] MatrixGenerics_1.25.0       matrixStats_1.5.0          
-#> [19] HTAN_0.99.0                 knitr_1.51                 
-#> 
-#> loaded via a namespace (and not attached):
-#>  [1] DBI_1.3.0                   gridExtra_2.3.1            
-#>  [3] httr2_1.3.0                 testthat_3.3.2             
-#>  [5] rlang_1.3.0                 magrittr_2.0.5             
-#>  [7] otel_0.2.0                  compiler_4.6.0             
-#>  [9] RSQLite_3.53.3              vctrs_0.7.3                
-#> [11] pkgconfig_2.0.3             fastmap_1.2.0              
-#> [13] dbplyr_2.6.0                magick_2.9.1               
-#> [15] XVector_0.53.0              labeling_0.4.3             
-#> [17] utf8_1.2.6                  ggbeeswarm_0.7.3           
-#> [19] purrr_1.2.2                 bit_4.6.0                  
-#> [21] xfun_0.60                   MultiAssayExperiment_1.39.0
-#> [23] cachem_1.1.0                beachmat_2.29.0            
-#> [25] jsonlite_2.0.0              blob_1.3.0                 
-#> [27] DelayedArray_0.39.4         BiocParallel_1.46.0        
-#> [29] irlba_2.3.7                 parallel_4.6.0             
-#> [31] cluster_2.1.8.3             R6_2.6.1                   
-#> [33] RColorBrewer_1.1-3          limma_3.69.2               
-#> [35] pkgload_1.5.3               brio_1.1.5                 
-#> [37] Rcpp_1.1.2                  Matrix_1.7-6               
-#> [39] igraph_2.3.3                tidyselect_1.2.1           
-#> [41] abind_1.4-8                 yaml_2.3.12                
-#> [43] viridis_0.6.5               codetools_0.2-20           
-#> [45] curl_7.1.0                  pkgbuild_1.4.8             
-#> [47] lattice_0.22-9              tibble_3.3.1               
-#> [49] withr_3.0.3                 S7_0.2.2                   
-#> [51] evaluate_1.0.5              desc_1.4.3                 
-#> [53] BiocFileCache_3.2.0         pillar_1.11.1              
-#> [55] BiocManager_1.30.27         filelock_1.0.3             
-#> [57] rprojroot_2.1.1             scales_1.4.0               
-#> [59] glue_1.8.1                  metapod_1.21.0             
-#> [61] tools_4.6.0                 BiocNeighbors_2.7.2        
-#> [63] ScaledMatrix_1.21.0         locfit_1.5-9.12            
-#> [65] grid_4.6.0                  tidyr_1.3.2                
-#> [67] edgeR_4.11.4                duckdb_1.5.5               
-#> [69] beeswarm_0.4.0              BiocSingular_1.28.0        
-#> [71] vipor_0.4.7                 cli_3.6.6                  
-#> [73] rsvd_1.0.5                  viridisLite_0.4.3          
-#> [75] S4Arrays_1.13.0             gtable_0.3.6               
-#> [77] SparseArray_1.12.2          ggrepel_0.9.8              
-#> [79] dqrng_0.4.1                 rjson_0.2.23               
-#> [81] farver_2.1.2                memoise_2.0.1              
-#> [83] lifecycle_1.0.5             statmod_1.5.2              
-#> [85] bit64_4.8.2
 ```
