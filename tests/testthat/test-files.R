@@ -39,5 +39,6 @@ test_that("htan_files() forwards filters and handles multi-participant files", {
 
     by_arg <- dplyr::collect(htan_files(participants = "HTA5_1765"))
     expect_true(h5ad$HTAN_Data_File_ID %in% by_arg$HTAN_Data_File_ID)
-    expect_error(htan_files(participants = 1), class = "htan_error_bad_argument")
+    expect_error(htan_files(participants = 1),
+        class = "htan_error_bad_argument")
 })
