@@ -1,4 +1,4 @@
-# HTAN 0.99.0
+# HTAN 0.99.1
 
 * `htan_download()` no longer writes to the working directory by
   default. Files are cached in a BiocFileCache of their own (the
@@ -6,7 +6,10 @@
   `HTAN.download_cache`), keyed by file ID and md5, keeping HTAN's
   directory layout; repeat calls are served from the cache after an md5
   check. `dest` is optional and copies the files there too. `status` can
-  now also be `"cached"` (#29).
+  now also be `"cached"` (#29, #33).
+
+# HTAN 0.99.0
+
 * `htan_con()` defaults to the public Hugging Face snapshot,
   `seandavis/htan` (one tag per release); `{release}` in `base_url` is
   replaced by the release. Downloads are sha256-verified before caching.
