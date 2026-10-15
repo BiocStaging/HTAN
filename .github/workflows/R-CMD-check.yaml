@@ -151,9 +151,14 @@ jobs:
           r-version: release
           use-public-rspm: true
 
+      # local::. also installs HTAN itself. On Windows, the R session that
+      # quarto.exe starts to run the vignette chunks does not see the
+      # temporary library R CMD build installs the package into, so
+      # library(HTAN) fails there unless the package is installed already.
+      # (Bioconductor's builders install a package before building it.)
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
-          extra-packages: any::rcmdcheck
+          extra-packages: any::rcmdcheck, local::.
           needs: check
 
       - uses: r-lib/actions/check-r-package@v2
