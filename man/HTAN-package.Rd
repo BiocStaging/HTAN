@@ -20,6 +20,7 @@ repository for design decisions.
 Useful links:
 \itemize{
   \item \url{https://github.com/seandavi/HTAN}
+  \item \url{https://seandavi.github.io/HTAN/}
   \item Report bugs at \url{https://github.com/seandavi/HTAN/issues}
 }
 
@@ -30,6 +31,11 @@ Useful links:
 Authors:
 \itemize{
   \item Sean Davis \email{seandavi@gmail.com} (\href{https://orcid.org/0000-0002-8991-6458}{ORCID})
+}
+
+Other contributors:
+\itemize{
+  \item National Cancer Institute (Grant U24CA289073) [funder]
 }
 
 }

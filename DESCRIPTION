@@ -8,7 +8,10 @@ Authors@R:
            family = "Davis",
            role = c("aut", "cre"),
            email = "seandavi@gmail.com",
-           comment = c(ORCID = "0000-0002-8991-6458")))
+           comment = c(ORCID = "0000-0002-8991-6458")),
+    person(given = "National Cancer Institute",
+           role = "fnd",
+           comment = "Grant U24CA289073"))
 Description: A client for the open-access data of the Human Tumor Atlas
     Network (HTAN), Phase 1. File, biospecimen, clinical and provenance
     metadata are queried locally from a versioned parquet snapshot of the
@@ -60,7 +63,8 @@ Suggests:
     testthat (>= 3.0.0),
     VisiumIO,
     withr
-biocViews: DataImport, SingleCell, Spatial, ThirdPartyClient
+biocViews: DataImport, DataRepresentation, BiomedicalInformatics,
+    SingleCell, Spatial, ThirdPartyClient, Transcriptomics
 VignetteBuilder: quarto
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
