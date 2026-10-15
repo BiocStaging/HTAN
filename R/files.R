@@ -101,7 +101,15 @@ htan_files <- function(..., participants = NULL, con = htan_con()) {
             DBI::dbQuoteString(con, t), rank[[t]],
             paste(exprs, collapse = ", "), q(t))
     }, character(1))
-    sprintf("
+    sprintf(.files_sql_template,
+        paste(selects, collapse = "\nUNION ALL\n"), .access_sql())
+}
+
+## The union of file tables (`f0`, filled in by .files_sql()), deduplicated
+## by table rank and joined to participants, DRS URIs and the access tier
+## (.access_sql()). Kept out of .files_sql() so the R logic stays short;
+## this is SQL text.
+.files_sql_template <- "
 WITH f0 AS (
 %s
 ),
@@ -140,9 +148,7 @@ j AS (
     LEFT JOIN p USING (HTAN_Data_File_ID)
     LEFT JOIN d USING (HTAN_Data_File_ID)
 )
-SELECT *, %s AS access FROM j", paste(selects, collapse = "\nUNION ALL\n"),
-        .access_sql())
-}
+SELECT *, %s AS access FROM j"
 
 ## Rank file tables newest source version first, so a file listed in more
 ## than one table is taken from the most recent release.
