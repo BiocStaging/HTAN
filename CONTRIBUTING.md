@@ -145,9 +145,12 @@ The PR template carries this list; it is the contract.
 
 ## How we use AI coding agents
 
-Much of this package was written with AI coding agents (Claude Code) under
-maintainer review, and agent-assisted contributions are welcome. The rules
-are the same as for any contribution, plus three:
+Almost all of this package was written by an AI coding agent (Claude Code)
+from the maintainer's design and under the maintainer's review; the README
+section "How this package was written" says so for users. Agent-assisted
+contributions are welcome, and we follow the [Bioconductor AI
+policy](https://contributions.bioconductor.org/ai-policy-third-party.html).
+The rules are the same as for any contribution, plus four:
 
 - **A human owns every PR.** You are responsible for code you submit, whoever
   or whatever typed it. Read the diff before you open the PR.
@@ -156,8 +159,10 @@ are the same as for any contribution, plus three:
   were not checked against the real snapshot are marked unverified.
 - **Agents read `CLAUDE.md`.** Keep it accurate when you change the
   architecture or the dev commands, so the next agent starts from the truth.
-
-Commits written with an agent carry a `Co-Authored-By:` trailer naming it.
+- **Record provenance.** Commits written with an agent carry a
+  `Co-Authored-By:` (or `Assisted-by:`) trailer naming it. Code copied from
+  another project needs a comment citing its source, and its license must
+  allow redistribution under MIT; say so in the PR.
 
 ## Code of conduct
 
