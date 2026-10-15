@@ -50,13 +50,17 @@ scrna <- htan_files(assay == "ScRNA-seq", level == 4)
 scrna |> count(HTAN_Center, sort = TRUE)
 htan_lineage(head(scrna, 1)) |> collect()   # back to raw files and biospecimens
 img <- htan_files(access == "open-gc", File_Size < 1e6) |> head(1)
-htan_download(img, dest = tempfile())  # anonymous, no account
+dl <- htan_download(img)               # anonymous, no account; cached
 ```
 
 Every query returns a lazy table: filter, join and count it with dplyr, and
-nothing is computed until you `collect()` it. `read_htan()` turns downloaded
-files into Bioconductor objects, and `htan_experiment()` assembles several
-into a `MultiAssayExperiment` with participant clinical data as `colData`.
+nothing is computed until you `collect()` it. `htan_download()` checks
+each file's md5 and keeps it in a BiocFileCache under
+`tools::R_user_dir("HTAN", "cache")`, so asking again costs nothing; pass
+`dest` to also copy the files to a directory of your choice. `read_htan()`
+turns downloaded files into Bioconductor objects, and `htan_experiment()`
+assembles several into a `MultiAssayExperiment` with participant clinical
+data as `colData`.
 
 ## What you can get
 
