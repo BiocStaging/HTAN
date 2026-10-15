@@ -16,10 +16,21 @@ without touching the user API.
 See \code{vignette("HTAN")} for a walk-through and \verb{adr/} in the source
 repository for design decisions.
 }
+\section{Development}{
+
+Almost all of the code, tests and documentation were written by an AI
+coding agent, Claude Code (Anthropic), working from the maintainer's
+design and under the maintainer's direction and review. The maintainer
+is responsible for the package and its maintenance. Commits written with
+the agent carry a \verb{Co-Authored-By:} trailer in the source repository. No
+third-party code was copied into the package.
+}
+
 \seealso{
 Useful links:
 \itemize{
   \item \url{https://github.com/seandavi/HTAN}
+  \item \url{https://seandavi.github.io/HTAN/}
   \item Report bugs at \url{https://github.com/seandavi/HTAN/issues}
 }
 

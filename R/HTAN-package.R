@@ -9,6 +9,14 @@
 #' See `vignette("HTAN")` for a walk-through and `adr/` in the source
 #' repository for design decisions.
 #'
+#' @section Development:
+#' Almost all of the code, tests and documentation were written by an AI
+#' coding agent, Claude Code (Anthropic), working from the maintainer's
+#' design and under the maintainer's direction and review. The maintainer
+#' is responsible for the package and its maintenance. Commits written with
+#' the agent carry a `Co-Authored-By:` trailer in the source repository. No
+#' third-party code was copied into the package.
+#'
 #' @keywords internal
 #' @importFrom rlang .data
 "_PACKAGE"

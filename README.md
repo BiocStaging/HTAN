@@ -113,11 +113,28 @@ on the same site.
 ## Status
 
 Version 0.99.x, experimental. The snapshot build, the Hugging Face default
-and anonymous DRS downloads have been verified against the live services.
-Synapse downloads are tested with mocked responses but have not yet been run
-with a real token ([#7](https://github.com/seandavi/HTAN/issues/7)), and the
-readers are tested on synthetic and example data, not yet on real HTAN
-Level 4 files ([#8](https://github.com/seandavi/HTAN/issues/8)).
+anonymous DRS downloads and Synapse downloads with a personal access token
+have been verified against the live services
+([#7](https://github.com/seandavi/HTAN/issues/7)). The readers are tested on
+synthetic and example data, not yet systematically on real HTAN Level 4
+files ([#8](https://github.com/seandavi/HTAN/issues/8)).
+
+## How this package was written
+
+Almost all of the code, tests, documentation and vignettes were written by
+an AI coding agent, [Claude Code](https://claude.com/claude-code)
+(Anthropic), working from the maintainer's design and under the maintainer's
+direction and review. The maintainer set the architecture (recorded in
+[`adr/`](adr/)), chose the data sources and the scope, reviewed the work and
+is responsible for the package, its correctness and its maintenance.
+
+Each commit written with the agent carries a `Co-Authored-By:` trailer, so
+`git log` records the provenance of every change. The offline test suite,
+`R CMD check` and BiocCheck run on every pull request, and live integration
+tests against the HTAN services run weekly. No third-party code was
+copied into the package, and everything here is released under the
+package's MIT license. [CONTRIBUTING.md](CONTRIBUTING.md#how-we-use-ai-coding-agents)
+describes how agent-assisted work is reviewed.
 
 ## Citation
 
