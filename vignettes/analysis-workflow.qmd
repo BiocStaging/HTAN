@@ -700,8 +700,8 @@ Read together, the plots and the summary suggest three kinds of spot.
   top_genes(epi, 8), ")", if (epi == deepest) ", and the deepest spots"))`.
 - **Stroma.** The cluster with the highest `COL1A1`
   `r result(paste0("(", cluster_n(stroma), ") "))`is led by collagens and
-  fibronectin`r result(paste0(" (", top_genes(stroma, 4), ")"))`, and lies
-  mostly in one region of the section.
+  other stromal and extracellular-matrix genes`r result(paste0(" (",
+  top_genes(stroma), ")"))`.
 - **Shallow spots.** The cluster with the fewest counts per spot
   `r result(paste0("(", cluster_n(shallow), ") "))`is led by the multi-copy
   families`r result(paste0(" (", top_genes(shallow), ")"))`, which take
@@ -752,8 +752,12 @@ recluster, and compare the regions with the H&E image.
 The metadata release is pinned (`htan_con("r7")`), the file is identified
 by its HTAN ID and checked against its md5, and the random steps (PCA,
 clustering, UMAP) use scrapper's fixed default seeds, so they give the
-same result on every run without `set.seed()`.
-The software versions are below. What is not pinned is the file's content
+same result on every run without `set.seed()`, for a given platform and
+set of package versions. Across versions and platforms the details can
+change: builds of this vignette with different scrapper releases and
+numerical libraries have given five or six clusters. That is why every
+result quoted in the text above is computed from the output rather than
+written in by hand. The software versions are below. What is not pinned is the file's content
 on Synapse: if the center replaced it, the md5 check would fail rather than
 silently give a different result.
 
