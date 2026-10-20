@@ -24,3 +24,5 @@ __pycache__/
 .DS_Store
 .venv-snapshot/
 .mypy_cache/
+# BiocCheck output
+*.BiocCheck/
