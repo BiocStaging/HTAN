@@ -30,3 +30,4 @@
 ^vignettes/\.quarto$
 ^\.git$
 ^\.env$
+^.*\.BiocCheck$
