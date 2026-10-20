@@ -41,19 +41,19 @@ Package: [*HTAN*](https://bioconductor.org/packages/HTAN)
 ([source](https://github.com/seandavi/HTAN)).
 
 This vignette follows one HTAN dataset from a metadata query to a
-biological result. It picks a small open spatial transcriptomics section
-of the colon, confirms where it came from, downloads it, reads it into a
-`SpatialExperiment`, wraps it with clinical data in a
-`MultiAssayExperiment`, and runs a short analysis: quality control,
-normalisation, clustering and spatial plots. Along the way it explains why
-each step is done the way it is.
+biological result. We pick a small, open spatial transcriptomics section
+of the colon, confirm where it came from, download it, read it into a
+`SpatialExperiment`, wrap it with clinical data in a
+`MultiAssayExperiment`, and run a short analysis: quality control,
+normalisation, clustering and spatial plots. Each step comes with the
+reason it is done that way.
 
-It assumes the [introduction](HTAN.html) and the
+It assumes you have read the [introduction](HTAN.html) and the
 [data model vignette](data-model.html). The metadata steps run anywhere.
-The download, and every step after it, needs a free Synapse account and a
-personal access token in `SYNAPSE_AUTH_TOKEN` (see the introduction), so
-where the vignette is built without a token, for example on the
-Bioconductor build machines, that code is shown without being run.
+The download and every step after it need a free Synapse account and a
+personal access token in `SYNAPSE_AUTH_TOKEN` (see the introduction).
+Where the vignette is built without a token, as on the Bioconductor build
+machines, that code is shown but not run.
 
 ```{r}
 #| label: packages
@@ -75,18 +75,18 @@ is attached last.
 
 ## The question
 
-The Vanderbilt atlas (HTA11) studied colorectal precancer and cancer. A
-section of colon is a good first spatial dataset. The colonic mucosa has
-an obvious architecture (epithelial crypts, the stroma of the lamina
-propria, immune cells), so the expression clusters of a correct analysis
-can be checked against recognisable tissue compartments, and against what
-the metadata say the tissue is.
+The Vanderbilt atlas (HTA11) studied colorectal precancer and cancer, and
+a section of colon makes a good first spatial dataset. The colonic mucosa
+has an obvious architecture (epithelial crypts, the stroma of the lamina
+propria, immune cells). If the analysis is right, its expression clusters
+should match recognisable tissue compartments, and agree with what the
+metadata say the tissue is.
 
 ## Finding candidate files
 
 10x Visium measures the transcriptome in a grid of 55 µm spots across a
 tissue section. Level 4 Visium files are processed objects, ready to
-analyse. Here are the open ones:
+analyse. These are the open ones, by center and format:
 
 ```{r}
 #| label: visium-candidates
@@ -99,13 +99,14 @@ visium |>
     collect()
 ```
 
-Three things guide the choice. First, the format: `.h5ad` (AnnData) files
-follow a common layout that anndataR reads reliably, whereas `.rds` files
-hold whatever R object the center saved. Second, provenance: a file from a
-single participant, measured on a biospecimen whose tissue type and site
-are recorded, so the result can be read against them. Third, size: small
-enough to download in seconds. The biospecimen fields come from the
-`biospecimen` table, joined on the assayed biospecimen:
+Three things guide the choice. The first is format: `.h5ad` (AnnData)
+files follow a common layout that anndataR reads reliably, whereas `.rds`
+files hold whatever R object the center saved. The second is provenance.
+We want a file from a single participant, measured on a biospecimen whose
+tissue type and site are recorded, so the result can be read against
+them. The third is size, small enough to download in seconds. The
+biospecimen fields come from the `biospecimen` table, joined on the
+assayed biospecimen:
 
 ```{r}
 #| label: candidates
@@ -128,14 +129,14 @@ candidates |>
     head(10)
 ```
 
-One property that matters is not in the metadata: the version of AnnData
-that wrote each file. Files written before AnnData 0.8 (released in 2022)
-use an older on-disk layout that anndataR does not read. `read_htan()`
-reads those with a fallback that keeps the matrices, `obs`, `var` and
-`obsm`, but not `uns`. Every file smaller than
-`7794_AS_3_unfiltered.h5ad` in this list is in that older layout (checked
-by opening each one), so this vignette uses `7794_AS_3`, the smallest file
-in the current layout, which anndataR reads in full:
+One property that matters is missing from the metadata: the version of
+AnnData that wrote each file. Files written before AnnData 0.8 (released
+in 2022) use an older on-disk layout that anndataR does not read.
+`read_htan()` reads those with a fallback that keeps the matrices, `obs`,
+`var` and `obsm`, but drops `uns`. Every file in this list smaller than
+`7794_AS_3_unfiltered.h5ad` is in the older layout (we checked by opening
+each one). So we use `7794_AS_3`, the smallest file in the current
+layout, which anndataR reads in full:
 
 ```{r}
 #| label: pick
@@ -146,8 +147,8 @@ glimpse(select(file, HTAN_Data_File_ID, Filename, File_Size, md5,
     entityId, HTAN_Participant_ID, HTAN_Assayed_Biospecimen_ID, access))
 ```
 
-The `entityId` is its Synapse ID; `access` is `open-synapse`, so a token is
-needed but no data access request.
+The `entityId` is the file's Synapse ID. `access` is `open-synapse`, so
+you need a token but not a data access request.
 
 ## What the metadata say about it
 
@@ -168,11 +169,11 @@ The file was made with Space Ranger against the GRCh38-2020-A reference,
 with the human whole-transcriptome probe set, so this is the probe-based
 Visium chemistry. The record disagrees with itself about the Space Ranger
 version (`Workflow_Version` is `r workflow$Workflow_Version`, but
-`Visium_Workflow_Type` says `r workflow$Visium_Workflow_Type`): these
-fields were filled in by hand at submission, and are worth reading
-sceptically. "Unfiltered" in the file name suggests it holds every spot
-on the capture area, not only those under tissue, which the analysis will
-need to handle.
+`Visium_Workflow_Type` says `r workflow$Visium_Workflow_Type`). These
+fields were filled in by hand at submission, so read them sceptically.
+"Unfiltered" in the file name suggests the file holds every spot on the
+capture area, including those off the tissue; if so, the analysis has to
+remove them.
 
 # Tracing lineage
 
@@ -188,9 +189,10 @@ lineage |>
         "", Component), file = basename(Filename))
 ```
 
-FASTQ (Level 1, controlled), aligned BAM (Level 2, controlled), the Space
-Ranger output (Level 3, open) and this object (Level 4). All were measured
-on one biospecimen. Its record, and the participant's:
+The chain runs from FASTQ (Level 1, controlled) through aligned BAM
+(Level 2, controlled) and the Space Ranger output (Level 3, open) to this
+object (Level 4). All were measured on one biospecimen. Here are its
+record and the participant's:
 
 ```{r}
 #| label: biospecimen
@@ -223,9 +225,9 @@ more specific is recorded: the morphology code is
 `r biospecimen$Histologic_Morphology_Code` (not reported), and the
 participant's primary diagnosis is "`r diagnosis$Primary_Diagnosis`".
 So the metadata do not say whether the lesion is an adenoma or a
-carcinoma, or of what type; the analysis has to be read without that.
-The participant has other data too, which could extend this analysis
-later:
+carcinoma, or of what type, and we have to read the analysis without
+that. The participant has other data too, which could extend the
+analysis later:
 
 ```{r}
 #| label: other-data
@@ -241,8 +243,8 @@ htan_files(participants = file$HTAN_Participant_ID, con = con) |>
 a short-lived download URL, fetches the file, and verifies its md5 against
 the metadata. The file is kept in the package's download cache (a
 BiocFileCache under `tools::R_user_dir("HTAN", "cache")`), so a second
-call finds the verified copy and does not download again. Pass `dest` to
-also copy files to a directory of your choice.
+call finds the verified copy instead of downloading it again. To get a
+copy in a directory of your choice as well, pass `dest`.
 
 ```{r}
 #| label: download
@@ -264,8 +266,8 @@ spe <- read_htan(dl)
 spe
 ```
 
-Level 4 objects differ between centers, so look before you compute. Three
-things matter here: which assay holds raw counts, whether there are spot
+Level 4 objects differ between centers, so look before you compute. We
+need to know which assay holds raw counts, whether there are spot
 coordinates, and which spots are under tissue.
 
 ```{r}
@@ -279,10 +281,10 @@ is(spe, "SpatialExperiment")
 ```
 
 Marker genes are easier to read as symbols. If the row names are Ensembl
-IDs, use a symbol column from `rowData()` instead (scanpy and Space Ranger
-call it different things), keeping names unique. Some probe-set features
-are named `DEPRECATED_` followed by an Ensembl ID; they are counted here
-and left as they are.
+IDs, we switch to a symbol column from `rowData()` (scanpy and Space
+Ranger name it differently), keeping the names unique. Some probe-set
+features are named `DEPRECATED_` followed by an Ensembl ID. We count them
+and leave them as they are.
 
 ```{r}
 #| label: symbols
@@ -297,8 +299,8 @@ sum(grepl("^DEPRECATED_", rownames(spe)))
 ```
 
 anndataR maps AnnData's main matrix `X` to an assay named `X`. Whether `X`
-is raw counts or normalised values is the center's choice, so test it: raw
-counts are whole numbers.
+holds raw counts or normalised values is up to the center, so we test it.
+Raw counts are whole numbers.
 
 ```{r}
 #| label: counts
@@ -314,9 +316,10 @@ If this were `FALSE`, the counts would have to come from a layer of the
 AnnData object or from the Level 3 Space Ranger matrix listed in the
 lineage.
 
-If the object had no spatial embedding, the spot positions are in the
+If the object has no spatial embedding, the spot positions are in the
 Level 3 `tissue_positions.csv` from the lineage table, which can be
-downloaded and joined by barcode. This chunk does that only when needed:
+downloaded and joined by barcode. This chunk does that only when it has
+to:
 
 ```{r}
 #| label: coordinates
@@ -338,8 +341,8 @@ if (!is(spe, "SpatialExperiment")) {
 dim(spatialCoords(spe))
 ```
 
-Finally, keep only spots under tissue. Spots outside the tissue capture
-ambient RNA and would form their own spurious cluster:
+Finally, we keep only spots under tissue. Spots outside it capture
+ambient RNA and would form a spurious cluster of their own:
 
 ```{r}
 #| label: in-tissue
@@ -374,14 +377,14 @@ MultiAssayExperiment::colData(mae)[, c("Gender", "Race", "Vital_Status",
 head(MultiAssayExperiment::sampleMap(mae))
 ```
 
-With one file the container is small, but the structure is the point:
-adding the participant's single-cell data, or other participants' Visium
-sections, keeps every spot and cell linked to one clinical record. For a
-file pooled from several participants, `htan_experiment()` needs the
-`colData` column that names each cell's participant
+With one file the container is small. It pays off once more data go
+in, such as the participant's single-cell data or other participants'
+Visium sections: every spot and cell stays linked to the right clinical
+record. For a file pooled from several participants, `htan_experiment()`
+needs the `colData` column that names each cell's participant
 (`participant_col`); see the [data model vignette](data-model.html#a-file-from-several-participants).
 
-The analysis below works on the `SpatialExperiment` itself:
+The analysis below works on the `SpatialExperiment` inside it:
 
 ```{r}
 #| label: get-experiment
@@ -395,24 +398,24 @@ The steps follow the standard Bioconductor workflow for spot-based
 spatial transcriptomics, as in the book *Orchestrating Spatial Transcriptomics
 Analysis with Bioconductor* ([OSTA](https://bioconductor.org/books/release/OSTA/))
 and its single-cell counterpart
-([scrapbook](https://bioconductor.org/books/release/scrapbook/)), with
-choices explained as they come. Like both books, it computes with
+([scrapbook](https://bioconductor.org/books/release/scrapbook/)). Like
+both books, we compute with
 [scrapper](https://bioconductor.org/packages/scrapper/), which implements
 the methods of scran and scuttle in C++ libraries (libscran) shared with
-the Python and JavaScript ports, and plots with scater. Each scrapper
+the Python and JavaScript ports, and plot with scater. Each scrapper
 function ending in `.se` takes a `SummarizedExperiment` (here the
 `SpatialExperiment`) and returns it with its results added.
 
 ## Quality control
 
-Per-spot metrics: total counts (library size) and the number of genes
-detected. In most RNA data a third metric is the share of counts from the
-mitochondrially encoded genes (`MT-` genes), which rises in damaged
-cells. A probe-based assay only measures the genes its panel targets,
-unlike poly(A) capture, which picks up whatever transcripts are present,
-and the panel used for this section has no probes for the `MT-` genes. So
-the code looks for them, and adds the mitochondrial share only if there
-are any. (Genes such as `MTRNR2L12` are nuclear, despite the name, and the
+The per-spot metrics are total counts (library size) and the number of
+genes detected. In most RNA data a third metric is the share of counts
+from the mitochondrially encoded genes (`MT-` genes), which rises in
+damaged cells. Poly(A) capture picks up whatever transcripts are present,
+but a probe-based assay measures only the genes its panel targets, and
+the panel used for this section has no probes for the `MT-` genes. So the
+code looks for them and adds the mitochondrial share only if it finds
+any. (Despite the name, genes such as `MTRNR2L12` are nuclear, and the
 `^MT-` pattern rightly skips them.)
 
 ```{r}
@@ -427,9 +430,9 @@ summary(spe$detected)
 if (any(is_mito)) summary(spe$subset.proportion.mito)
 ```
 
-Plotting the metrics on the tissue (image row coordinates increase
-downwards, hence the reversed y axis) shows whether low-quality spots are
-scattered (technical) or form a region (biological):
+Plotted on the tissue, the metrics show whether low-quality spots are
+scattered (technical) or form a region (biological). Image row
+coordinates increase downwards, hence the reversed y axis.
 
 ```{r}
 #| label: fig-qc
@@ -454,13 +457,14 @@ spot_plot(spe, log10(spe$sum + 1), "log10\ncounts") +
     scale_colour_viridis_c()
 ```
 
-Spots are flagged as outliers by median absolute deviations (MADs) from
-the median, instead of fixed thresholds, because sensible thresholds depend
-on the tissue, the probe panel and sequencing depth. `quickRnaQc.se()`
-has already done this: it set each threshold three MADs from the median,
-testing library size and detected genes on the low side only (and the
-mitochondrial share, when there is one, on the high side), and stored the
-verdict in `keep`. The thresholds are kept in the object's metadata:
+Outlier spots are flagged by their distance from the median in median
+absolute deviations (MADs), not by fixed thresholds, because a sensible
+threshold depends on the tissue, the probe panel and the sequencing
+depth. `quickRnaQc.se()` has already done this. It set each threshold
+three MADs from the median, testing library size and detected genes on
+the low side only (and the mitochondrial share, when there is one, on the
+high side), and stored the verdict in `keep`. The thresholds are in the
+object's metadata:
 
 ```{r}
 #| label: qc-filter
@@ -484,11 +488,11 @@ if (n_discard == 1) "is" else "are", " discarded"))`.
 ## Normalisation
 
 Spots differ in library size for technical reasons (capture efficiency,
-tissue thickness) and biological ones (cell density). Library-size
-normalisation followed by a log transform is the usual choice for Visium.
-The pooling-based size factors common in single-cell work assume most
-genes are not differentially expressed between pools of cells, which is
-less safe for spots that mix several cells of different types.
+tissue thickness) and biological ones (cell density). The usual choice
+for Visium is library-size normalisation followed by a log transform. The
+pooling-based size factors common in single-cell work assume that most
+genes are not differentially expressed between pools of cells, an
+assumption that is less safe for spots mixing several cell types.
 `normalizeRnaCounts.se()` uses the library sizes as size factors by
 default, scaled to average 1, and adds the `logcounts` assay.
 
@@ -501,12 +505,12 @@ summary(spe$sizeFactor)
 
 ## Feature selection and dimensionality reduction
 
-Highly variable genes carry the structure; the rest add noise. The variance
-of each gene's log-expression is modelled against its mean, and the 2,000
-genes with the largest residual above that trend are marked in
-`rowData(spe)$hvg`. Where there are mitochondrial genes, they are then
-removed from the set so that tissue damage does not drive the clustering;
-this panel has none, so here the step does nothing.
+Highly variable genes carry the structure; the rest add noise. We model
+the variance of each gene's log-expression against its mean and mark the
+2,000 genes with the largest residual above that trend in
+`rowData(spe)$hvg`. Mitochondrial genes, where there are any, are then
+dropped from the set so that tissue damage does not drive the
+clustering. This panel has none, so here that step does nothing.
 
 ```{r}
 #| label: hvgs
@@ -529,7 +533,7 @@ percent_var <- 100 * pca$variance.explained / pca$total.variance
 round(head(percent_var, 10), 1)
 ```
 
-Thirty components are kept, a common default that is generous for a
+We keep thirty components, a common default and a generous one for a
 tissue with a handful of domains. No single component explains much of
 the variance`r result(paste0(" (the first ", round(percent_var[1], 1),
 "%, the second ", round(percent_var[2], 1), "%)"))`, which is usual for
@@ -540,11 +544,11 @@ spots that each average several cells.
 Spots are clustered on the principal components with a shared
 nearest-neighbour graph (Jaccard-weighted) and the Leiden algorithm at
 resolution 0.5, the settings OSTA uses for its colorectal Visium workflow.
-This uses expression alone; the spatial plot afterwards is then a test:
-if clusters computed without coordinates form coherent regions, they
-reflect real tissue structure. Spatially aware methods (for example
-BayesSpace or Banksy) smooth over neighbours and would give cleaner
-domains, at the cost of that independent check.
+The clustering sees expression alone, which turns the spatial plot that
+follows into a test: if clusters computed without coordinates form
+coherent regions, they reflect real tissue structure. Spatially aware
+methods (for example BayesSpace or Banksy) smooth over neighbours and
+would give cleaner domains, but we would lose that independent check.
 
 ```{r}
 #| label: cluster
@@ -575,16 +579,17 @@ plotReducedDim(spe, "UMAP", colour_by = "cluster")
 
 ## What the clusters are
 
-Marker genes say what each cluster is. `scoreMarkers.se()` compares each
-cluster with every other one and summarises the pairwise effect sizes for
-each gene: Cohen's d (the difference in mean log-expression in standard
-deviations), the AUC (the probability that a spot in the cluster has
-higher expression than a spot in the other), and the differences in mean
-expression and in the proportion of spots where the gene is detected.
-Genes are ranked by Cohen's d averaged over the comparisons. Effect sizes
-are a better summary than p-values here: the clusters were defined from
-these same expression values, so a test for differences between them is
-circular and its p-values would not mean what they usually do.
+Marker genes tell us what each cluster is. `scoreMarkers.se()` compares
+each cluster with every other one and summarises the pairwise effect
+sizes for each gene: Cohen's d (the difference in mean log-expression in
+standard deviations), the AUC (the probability that a spot in the cluster
+has higher expression than a spot in the other), and the differences in
+mean expression and in the proportion of spots where the gene is
+detected. Genes are ranked by Cohen's d averaged over the comparisons.
+Here effect sizes are a better summary than p-values. The clusters were
+defined from these same expression values, so a test for differences
+between them is circular, and its p-values would not mean what they
+usually do.
 
 ```{r}
 #| label: markers
@@ -600,12 +605,13 @@ Some clusters are led by members of multi-copy gene families, such as
 `SERF1A` and `SERF1B`, `FAM153B`, the `USP17L` genes and `MTRNR2L12`,
 rather than by genes that mark a cell type. Each of these families has
 several near-identical copies in the genome, so a probe, or a read, may
-not be specific to one of them; the `MTRNR2L` genes are also close copies
-of the mitochondrial rRNA gene `MT-RNR2`. Their signal may therefore be
-partly technical (this is unverified). A per-cluster summary makes the
-pattern easier to see: the number of spots, their median depth, the
-median share of each spot's counts that goes to these families, and the
-mean log-expression of an epithelial and a stromal marker.
+not be specific to one of them, and the `MTRNR2L` genes are also close
+copies of the mitochondrial rRNA gene `MT-RNR2`. Their signal may
+therefore be partly technical (this is unverified). The pattern is
+easier to see in a per-cluster summary of the number of spots, their
+median depth, the median share of each spot's counts that goes to these
+families, and the mean log-expression of an epithelial and a stromal
+marker:
 
 ```{r}
 #| label: cluster-summary
@@ -633,9 +639,9 @@ deepest <- cluster_summary$cluster[which.max(cluster_summary$median_counts)]
 ```
 
 The top of the ranking for the most epithelial cluster (highest mean
-`EPCAM`) shows the statistics behind it: mean log-expression and detected
-proportion in the cluster, then the mean Cohen's d and AUC against the
-other clusters.
+`EPCAM`) shows the statistics behind it: the mean log-expression and
+detected proportion in the cluster, then the mean Cohen's d and AUC
+against the other clusters.
 
 ```{r}
 #| label: markers-epithelial
@@ -644,7 +650,7 @@ previewMarkers(markers[[epi]], rows = 8, columns = c("mean", "detected",
     d = "cohens.d.mean", auc = "auc.mean"))
 ```
 
-Known markers of the colonic mucosa make the interpretation concrete:
+To pin the clusters down, we plot known markers of the colonic mucosa:
 `EPCAM` for epithelium, `MUC2` for goblet cells and their mucin, `CA1` for
 the absorptive colonocytes that line normal colonic epithelium, `COL1A1`
 for stroma and `PTPRC` for immune cells. `SERF1A` stands in for the
@@ -695,22 +701,23 @@ share <- function(k) {
 }
 ```
 
-Read together, the plots and the summary suggest three kinds of spot.
+Read together, the plots and the summary suggest three kinds of spot:
 
-- **Epithelium.** The cluster with the highest `EPCAM`
+- Epithelium. The cluster with the highest `EPCAM`
   `r result(paste0("(", cluster_n(epi), ") "))`has epithelial and
   secretory genes among its top markers`r result(paste0(" (",
   top_genes(epi, 8), ")", if (epi == deepest) ", and the deepest spots"))`.
-- **Stroma.** The cluster with the highest `COL1A1`
+- Stroma. The cluster with the highest `COL1A1`
   `r result(paste0("(", cluster_n(stroma), ") "))`is led by collagens and
   other stromal and extracellular-matrix genes`r result(paste0(" (",
   top_genes(stroma), ")"))`.
-- **Shallow spots.** The cluster with the fewest counts per spot
+- Shallow spots. The cluster with the fewest counts per spot
   `r result(paste0("(", cluster_n(shallow), ") "))`is led by the multi-copy
   families`r result(paste0(" (", top_genes(shallow), ")"))`, which take
   `r result(share(shallow), "a large share")` of a typical spot's counts
-  there. It lies along the edges of the section, where the library-size
-  map is darkest, and may reflect capture depth more than a cell type.
+  there. These spots lie along the edges of the section, where the
+  library-size map is darkest, and the cluster may reflect capture depth
+  more than a cell type.
 
 The section as a whole does not look like normal colonic mucosa. `MUC2`
 is detected throughout`r result(paste0(" (in ",
@@ -724,45 +731,49 @@ remains a hypothesis: the H&E image of the section (an auxiliary file of a
 few gigabytes) is the place to check it.
 
 So the expression clusters do form regions on the tissue, which suggests
-real structure, but here they separate spots by depth and by a few gene
+real structure. But they separate spots by depth and by a few gene
 families as well as by tissue compartment. Two next steps would sharpen
 them: drop the multi-copy families from the highly variable genes and
 recluster, and compare the regions with the H&E image.
 
 # Where to go from here
 
-- **More sections.** Other Vanderbilt Visium files cover more colon
-  lesions (`candidates` above). Read several, give each its file ID, and
-  combine them in one `MultiAssayExperiment`; integrate them with batch
-  correction (for example scrapper's `correctMnn.se()`) before joint
-  clustering.
-- **Single-cell reference.** The participant also has single-cell
-  RNA-seq (Level 3 count matrices). Cell types from those can be used to
-  deconvolve the spots (for example with
-  [SPOTlight](https://bioconductor.org/packages/release/bioc/html/SPOTlight.html)).
-- **Spatial domains and statistics.**
-  [BayesSpace](https://bioconductor.org/packages/release/bioc/html/BayesSpace.html)
-  or [Banksy](https://bioconductor.org/packages/release/bioc/html/Banksy.html)
-  for spatially smoothed domains;
-  [nnSVG](https://bioconductor.org/packages/release/bioc/html/nnSVG.html)
-  for spatially variable genes.
-- **Other participants.** `htan_files()` and the clinical tables find
-  comparable sections from other atlases, for example premalignant versus
-  invasive tissue.
+Other Vanderbilt Visium files cover more colon lesions (`candidates`
+above). You can read several, give each its file ID, and combine them in
+one `MultiAssayExperiment`, then integrate them with batch correction
+(for example scrapper's `correctMnn.se()`) before clustering them
+together.
+
+The participant also has single-cell RNA-seq (Level 3 count matrices).
+Cell types from those can be used to deconvolve the spots, for example
+with
+[SPOTlight](https://bioconductor.org/packages/release/bioc/html/SPOTlight.html).
+
+For spatially smoothed domains there are
+[BayesSpace](https://bioconductor.org/packages/release/bioc/html/BayesSpace.html)
+and [Banksy](https://bioconductor.org/packages/release/bioc/html/Banksy.html);
+for spatially variable genes,
+[nnSVG](https://bioconductor.org/packages/release/bioc/html/nnSVG.html).
+
+Beyond this participant, `htan_files()` and the clinical tables find
+comparable sections from other atlases, for example premalignant versus
+invasive tissue.
 
 # Notes on reproducibility
 
-The metadata release is pinned (`htan_con("r7")`), the file is identified
-by its HTAN ID and checked against its md5, and the random steps (PCA,
-clustering, UMAP) use scrapper's fixed default seeds, so they give the
-same result on every run without `set.seed()`, for a given platform and
-set of package versions. Across versions and platforms the details can
+The metadata release is pinned (`htan_con("r7")`), and the file is
+identified by its HTAN ID and checked against its md5. The random steps
+(PCA, clustering, UMAP) use scrapper's fixed default seeds, so on a given
+platform and set of package versions they give the same result on every
+run without `set.seed()`. Across versions and platforms the details can
 change: builds of this vignette with different scrapper releases and
 numerical libraries have given five or six clusters. That is why every
 result quoted in the text above is computed from the output rather than
-written in by hand. The software versions are below. What is not pinned is the file's content
-on Synapse: if the center replaced it, the md5 check would fail rather than
-silently give a different result.
+written in by hand. The software versions are listed below.
+
+The file's content on Synapse is not pinned. If the center replaced the
+file, the md5 check would fail rather than silently give a different
+result.
 
 # Session information
 

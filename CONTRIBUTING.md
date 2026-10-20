@@ -11,15 +11,15 @@ it applies to people too.
 
 ## Issues vs. pull requests
 
-- **Bug, feature or behavior change: open an issue first** (or link an
-  existing one), then reference it from the PR with `Fixes #123`. For bugs,
-  the issue form asks for a reproducible example, `sessionInfo()` and
+- For a bug, a feature or a behavior change, open an issue first (or link
+  an existing one), then reference it from the PR with `Fixes #123`. The bug
+  form asks for a reproducible example, `sessionInfo()` and
   `htan_snapshot_info()`.
-- **Questions about HTAN data** (what an assay level means, why a file is
-  missing, which table holds a field) use the *Data question* form, or the
-  [Bioconductor support site](https://support.bioconductor.org/tag/htan)
+- Questions about HTAN data (what an assay level means, why a file is
+  missing, which table holds a field) go in the *Data question* form, or on
+  the [Bioconductor support site](https://support.bioconductor.org/tag/htan)
   with the tag `htan`. See [SUPPORT.md](SUPPORT.md).
-- **Chore, CI, docs or refactor: a pull request alone is fine.**
+- For a chore, CI, docs or a refactor, a pull request alone is fine.
 
 Good starting points carry the `good first issue` or `help wanted` labels.
 
@@ -52,7 +52,7 @@ every Rd file, so match it before running `just document`.
 
 ## Tests and fixtures
 
-The default suite is **offline** and should stay that way.
+The default suite runs offline, and it should stay that way.
 
 - `inst/extdata/snapshot/r7/` is a tiny, real-shaped r7 snapshot (all 78
   tables, six seed participants and their lineage closure, about 1 MB). Tests
@@ -73,10 +73,10 @@ with `HTAN_INTEGRATION=true`:
 just test-integration
 ```
 
-They read the Hugging Face r7 manifest and verify every checksum, and
-download an open imaging file anonymously through DRS. The Synapse test also
-needs `SYNAPSE_AUTH_TOKEN` and skips without it. These tests are not part of
-PR CI; a scheduled workflow runs them weekly.
+They read the Hugging Face r7 manifest, verify every checksum and download
+an open imaging file anonymously through DRS. The Synapse test also needs
+`SYNAPSE_AUTH_TOKEN` and skips without it. PR CI does not run these tests;
+a scheduled workflow runs them weekly.
 
 ## The snapshot builder
 
@@ -92,8 +92,9 @@ just snapshot bioc-u24             # writes snapshot/r7/ (gitignored)
 just fixture                       # cut the test fixture from snapshot/
 ```
 
-Run it through `just`, which keeps the virtualenv in `.venv-snapshot/`. A
-venv under `inst/` breaks `R CMD build`. The builder never uploads anything;
+Run it through `just`, which keeps the virtualenv in `.venv-snapshot/`,
+because a venv under `inst/` breaks `R CMD build`. The builder never
+uploads anything;
 publishing a release to the Hugging Face dataset is a manual step
 ([ADR-0003](adr/0003-hugging-face-hosting.md)). Most contributors never need
 to run it.
@@ -107,9 +108,9 @@ architecture; ADR-0001 is the core design.
 Add an ADR when a PR changes where data comes from, what a function returns,
 a dependency, the snapshot layout or another decision a future contributor
 would otherwise have to reverse-engineer. Copy the shape of the existing
-ones: a header with Status, Date and Deciders, then **Context**,
-**Decision**, **Consequences** and **Alternatives considered**. Superseding
-an ADR means a new ADR that says so, not an edit to the old one.
+ones: a header with Status, Date and Deciders, then sections for Context,
+Decision, Consequences and Alternatives considered. To supersede an ADR,
+write a new one that says so and leave the old one as it is.
 
 ## Style
 
@@ -157,8 +158,8 @@ The rules are the same as for any contribution, plus four:
 - **Say what was verified.** State in the PR what you ran (tests, `R CMD
   check`, a live query) and what you did not. Claims about HTAN data that
   were not checked against the real snapshot are marked unverified.
-- **Agents read `CLAUDE.md`.** Keep it accurate when you change the
-  architecture or the dev commands, so the next agent starts from the truth.
+- **Agents read `CLAUDE.md`.** When you change the architecture or the dev
+  commands, update it, so the next agent does not work from a stale picture.
 - **Record provenance.** Commits written with an agent carry a
   `Co-Authored-By:` (or `Assisted-by:`) trailer naming it. Code copied from
   another project needs a comment citing its source, and its license must

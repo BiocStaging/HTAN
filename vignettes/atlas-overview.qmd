@@ -32,17 +32,19 @@ Package: [*HTAN*](https://bioconductor.org/packages/HTAN)
 `r packageVersion("HTAN")`
 ([source](https://github.com/seandavi/HTAN)).
 
-This vignette describes HTAN Phase 1 as it stands in Release 7, the final
-Phase 1 release: who the participants are, where their samples came from,
-which assays were run on them, at which data levels the results were
-released, and how much clinical annotation comes with them. It is meant to
-help you judge what HTAN can and cannot support before you plan an
-analysis.
+This vignette describes HTAN Phase 1 as of Release 7, the final Phase 1
+release: who the participants are, where their samples came from, which
+assays were run on them, at which data levels the results were released,
+and how much clinical annotation comes with them. Read it before you plan
+an analysis, to judge what the data can and cannot support.
 
-Every number, table and figure below is computed from the Release 7
-metadata snapshot. The [data model vignette](data-model.html) explains the
-tables used here; this vignette leans on its warnings about duplicates,
-comma-separated lists and inconsistent spelling.
+Every table and figure below, and nearly every count in the text, is
+computed from the Release 7 metadata snapshot. The [data model
+vignette](data-model.html) explains the tables used here, and its warnings
+about duplicates, comma-separated lists and inconsistent spelling apply
+throughout.
+
+We open one connection to the snapshot and use it for everything below.
 
 ```{r}
 #| label: load
@@ -66,13 +68,13 @@ tier_colours <- c(`open-synapse` = "#2a78d6", `open-gc` = "#eb6834",
 
 # Building the working tables
 
-Three tables carry most of what follows. `files` is one row per file from
-`htan_files()`, with a coarse *modality* added. `file_participants` links
-files to participants through `id_provenance`, one row per pair, so that
-pooled files count for every participant they include. `imaging_types`
-gives the imaging technology of each Level 2 image, which `Component` does
-not record (every multiplexed image, H&E slide and MERFISH run is
-`ImagingLevel2`).
+Most of what follows works from three tables. `files` has one row per file
+from `htan_files()`, plus a coarse *modality*. `file_participants` links
+files to participants through `id_provenance`, one row per file and
+participant, so a pooled file counts once for every participant in it.
+`imaging_types` gives the imaging technology of each Level 2 image. We need
+it because `Component` does not record the technology: every multiplexed
+image, H&E slide and MERFISH run is `ImagingLevel2`.
 
 ```{r}
 #| label: working-tables
@@ -113,11 +115,11 @@ dim(files)
 dim(file_participants)
 ```
 
-The imaging type of a Level 3 or 4 imaging file is that of the Level 2
-image it was computed from, so the modality above is exact for Level 2
-images and approximate for derived imaging files (they fall under
-"Multiplexed imaging" unless their assay says otherwise). Participant
-counts below use every level.
+A Level 3 or 4 imaging file has the imaging type of the Level 2 image it
+was computed from, and the join above does not trace that link. So the
+modality is exact for Level 2 images and approximate for derived imaging
+files, which fall under "Multiplexed imaging" unless their assay says
+otherwise. Participant counts below use every level.
 
 # The release at a glance
 
@@ -142,11 +144,13 @@ Release 7 lists `r fmt(nrow(files))` files totalling
 `r fmt(n_bios_assayed)` assayed biospecimens and `r fmt(n_part_files)`
 participants. The clinical demographics table has records for
 `r fmt(n_part_demo)` participants and the biospecimen table lists
-`r fmt(n_bios)` biospecimens; both include participants and samples with
-no released files, so for questions about data, count from `id_provenance`
-as done here. (The DCC's 2025 description of Phase 1 counted 2,042
+`r fmt(n_bios)` biospecimens. Both include participants and samples with
+no released files, so to count what has data, count from `id_provenance`,
+as we do here. (The DCC's 2025 description of Phase 1 counted 2,042
 participants and 8,425 biospecimens, before Release 7 added data from
 another 422 participants.)
+
+By access tier:
 
 ```{r}
 #| label: access-tiers
@@ -202,9 +206,9 @@ microscopy, which produces one file per imaged plane or tile, but only
 `r centers$participants[centers$HTAN_Center == most_files]` participants.
 `r top` has by far the most participants (`r fmt(centers$participants[1])`),
 `r fmt(dcis_top)` of them with a diagnosis of ductal carcinoma in situ.
-File counts measure how a center packaged its data more than
-how much biology it covers; participants and biospecimens are the better
-measure of scope.
+File counts say more about how a center packaged its data than about how
+much biology it covers. To compare scope, count participants or
+biospecimens.
 
 ```{r}
 #| label: fig-centers
@@ -224,9 +228,9 @@ The diagnosis table records each participant's tissue or organ of origin
 in ICD-O-3 site terms ("Upper-outer quadrant of breast", "Sigmoid colon").
 The snapshot's `tissueOrOrganOfOrigin_to_wholeOrgan_mapping` table
 collapses those to whole organs. Not every term in Release 7 is in the
-mapping (for example "Upper lobe lung" and several soft-tissue sites), so
-terms are matched case-insensitively, the unmapped ones are assigned by
-keyword, and anything left is kept as it is.
+mapping ("Upper lobe lung" and several soft-tissue sites are missing), so
+we match terms case-insensitively, assign the unmapped ones by keyword and
+keep anything left as it is.
 
 ```{r}
 #| label: organs
@@ -282,12 +286,14 @@ organs |>
 
 Breast dominates, and the `main_center` column shows why: most breast
 participants come from one center's cohort. Lung, colorectal, skin
-(melanoma) and pancreas follow. The ranking reflects which centers enrolled
-large cohorts more than the burden of each cancer. "Not reported" is
-large: many participants, especially in the pre-cancer atlases, have no
-usable organ in the diagnosis table, and their organ has to be read from the biospecimen
-table (`Site_of_Resection_or_Biopsy`) instead. A participant with several
-diagnosis records can appear under more than one organ.
+(melanoma) and pancreas follow. The ranking says more about which centers
+enrolled large cohorts than about the burden of each cancer.
+
+"Not reported" is large. Many participants, especially in the pre-cancer
+atlases, have no usable organ in the diagnosis table, and their organ has
+to be read from the biospecimen table (`Site_of_Resection_or_Biopsy`)
+instead. A participant with several diagnosis records can appear under
+more than one organ.
 
 The most common primary diagnoses, again among participants with data:
 
@@ -302,14 +308,16 @@ dx |>
 ```
 
 HTAN's emphasis on transitions shows here. Ductal carcinoma in situ, a
-non-invasive breast lesion, is the most common single diagnosis, and
-precursor states such as familial adenomatous polyposis appear further
-down the list, alongside metastatic and recurrent cancers. The `NOS` ("not otherwise
-specified") terms are ICD-O-3 morphology names.
+non-invasive breast lesion, is the most common single diagnosis.
+Precursor states such as familial adenomatous polyposis appear further
+down the list, alongside metastatic and recurrent cancers. The `NOS`
+("not otherwise specified") terms are ICD-O-3 morphology names.
 
 # Assays and data levels
 
 ## Which assays, at which levels
+
+File counts by assay and data level:
 
 ```{r}
 #| label: assay-levels
@@ -324,22 +332,21 @@ assay_levels <- files |>
 knitr::kable(assay_levels, format.args = list(big.mark = ","))
 ```
 
-A few patterns matter for analysis:
+Sequencing assays have all four levels, but Levels 1 and 2 (reads) are
+controlled, and many datasets stop at Level 3 (count matrices). Level 4
+single-cell objects exist for a subset of datasets.
 
-- **Sequencing assays have all four levels**, but Level 1 and 2 (reads) are
-  controlled, and many datasets stop at Level 3 (count matrices). Level 4
-  single-cell objects exist for a subset of datasets.
-- **Imaging starts at Level 2.** Raw tiles (Level 1) were rarely
-  submitted; the released image is the stitched OME-TIFF. Segmentation
-  (Level 3) and cell tables (Level 4) exist for a fraction of images.
-- **Some assays have no levels**: Xenium experiments are single bundles,
-  Visium auxiliary files and "Other Assay" files sit outside the scheme,
-  and ExSeq uses a minimal metadata template.
+Imaging starts at Level 2. Raw tiles (Level 1) were rarely submitted; the
+released image is the stitched OME-TIFF. Segmentation (Level 3) and cell
+tables (Level 4) exist for a fraction of images.
+
+Some assays have no levels at all. Xenium experiments are single bundles,
+Visium auxiliary files and "Other Assay" files sit outside the scheme, and
+ExSeq uses a minimal metadata template.
 
 ## Who ran what
 
-The heatmap shows how many participants each center profiled with each
-modality.
+Counting participants rather than files, center by modality:
 
 ```{r}
 #| label: fig-heatmap
@@ -380,17 +387,20 @@ prot <- file_participants |>
 ```
 
 Rows are ordered by participant count. Single-cell sequencing and
-multiplexed imaging are the network's common currencies:
+multiplexed imaging are common across the network:
 `r length(both)` of the `r nlevels(heat$HTAN_Center)` centers have both.
-Spatial transcriptomics is less widespread; `r length(st_centers$HTAN_Center)`
+Spatial transcriptomics is less widespread: `r length(st_centers$HTAN_Center)`
 centers have it, led by `r paste(head(as.character(st_centers$HTAN_Center), 3), collapse = ", ")`.
 Electron microscopy is OHSU's alone, and proteomics and metabolomics cover
 only `r prot` participants. The darkest tiles are bulk sequencing and H&E
-at Duke: its large breast cohort was characterised mainly by bulk RNA and
+at Duke. Its large breast cohort was characterised mainly by bulk RNA and
 exome sequencing and histology, with single-cell sequencing for only a few
 participants.
 
 ## Multiplexed imaging technologies
+
+Level 2 images by imaging technology, with the participants and centers
+behind each:
 
 ```{r}
 #| label: imaging-types
@@ -408,19 +418,20 @@ imaging_participants |>
     knitr::kable(format.args = list(big.mark = ","))
 ```
 
-H&E is the most widely shared modality, a common reference that lets
-images from different technologies be registered and compared. The
-multiplexed technologies (cyclic immunofluorescence in its CyCIF, t-CyCIF
-and MxIF forms, CODEX, mIHC, MIBI, IMC and Orion) measure tens of protein
-markers per cell in intact tissue; their Level 4 cell tables are what
-`read_htan()` turns into `SpatialExperiment` objects. MERFISH, listed under
-imaging because it is image-based, measures RNA and is counted as spatial
-transcriptomics above.
+H&E is the most widely shared modality. It is a common reference against
+which images from different technologies can be registered and compared.
+The multiplexed technologies (cyclic immunofluorescence in its CyCIF,
+t-CyCIF and MxIF forms, CODEX, mIHC, MIBI, IMC and Orion) measure tens of
+protein markers per cell in intact tissue. Their Level 4 cell tables are
+what `read_htan()` turns into `SpatialExperiment` objects. MERFISH is
+listed under imaging because it is image-based, but it measures RNA, so
+we count it as spatial transcriptomics.
 
 # Single-cell and spatial coverage
 
-Much of HTAN's value is in participants profiled more than one way. Here
-each participant is assigned the set of modalities they have data for:
+Much of HTAN's value is in participants profiled more than one way. We
+give each participant the set of modalities, out of five, that they have
+data for:
 
 ```{r}
 #| label: combinations
@@ -466,8 +477,8 @@ mx <- has("Multiplexed imaging")
 multiplexed imaging. `r fmt(length(intersect(sc, st)))` have both
 single-cell and spatial transcriptomics, and
 `r fmt(length(intersect(sc, mx)))` have both single-cell sequencing and
-multiplexed imaging: these are the participants for which cell types
-defined from dissociated cells can be located in tissue.
+multiplexed imaging. In these participants, cell types defined from
+dissociated cells can be located in tissue.
 `r fmt(sum(combos$n[!grepl("\\+", combos$combo)]))` participants
 (`r pct(sum(combos$n[!grepl("\\+", combos$combo)]) / sum(combos$n))` of those
 with any of these five modalities) were profiled with only one, so
@@ -498,8 +509,8 @@ almost entirely CSV cell tables, and Level 3 is segmentation masks.
 `read_htan()` covers the `.rds`, `.h5ad`, 10x `.h5`, Space Ranger and CSV
 cases.
 
-File sizes span several orders of magnitude, which matters when you plan
-downloads:
+File sizes span several orders of magnitude. That matters when you plan
+downloads.
 
 ```{r}
 #| label: fig-sizes
@@ -533,10 +544,13 @@ files |>
 Level 3 spatial transcriptomics files are small because each Space Ranger
 output is split into its pieces (barcodes, features, matrix, positions).
 Level 4 single-cell objects are the largest, since many combine several
-samples into one object. `htan_download()` refuses downloads above 20 GB in total unless you raise
-`max_bytes`.
+samples into one object. `htan_download()` refuses downloads above 20 GB
+in total unless you raise `max_bytes`.
 
 # Biospecimens
+
+Biospecimens by tumour tissue type, with the various missing-value codes
+folded into "Not reported":
 
 ```{r}
 #| label: biospecimen-types
@@ -562,11 +576,13 @@ share_pre <- mean(grepl("^Premalignant|^Atypia", tt))
 ```
 
 Primary tumour is the largest category (`r pct(share_primary)` of
-biospecimens), but metastatic, premalignant and atypical tissue together
-are a large share (premalignant and atypia alone are `r pct(share_pre)`),
-which is what the study of transitions needs. Normal and normal-adjacent
-tissue are `r pct(share_normal)`, so comparisons against normal tissue
-are possible only for some atlases.
+biospecimens). Metastatic, premalignant and atypical tissue together are
+a large share (premalignant and atypia alone are `r pct(share_pre)`), and
+that is the material the study of transitions needs. Normal and
+normal-adjacent tissue are `r pct(share_normal)`, so comparisons against
+normal tissue are possible only for some atlases.
+
+By preservation method:
 
 ```{r}
 #| label: preservation
@@ -579,15 +595,16 @@ bios |>
 
 Formalin-fixed paraffin-embedded (FFPE) tissue is the majority. FFPE suits
 imaging and some spatial methods; fresh or frozen tissue is needed for most
-single-cell sequencing. The preservation method of a biospecimen therefore
-largely predicts which assays could have been run on it.
+single-cell sequencing. So a biospecimen's preservation method largely
+predicts which assays could have been run on it.
 
 # Clinical variables
 
 ## What is recorded
 
-Tier 1 clinical data are spread over seven tables. Their sizes, and the
-number of participants each covers:
+Tier 1 clinical data are spread over seven tables. Here are their sizes
+and the number of participants each covers, with the tier 2 table
+alongside:
 
 ```{r}
 #| label: clinical-tables
@@ -616,9 +633,9 @@ htan_tables(con) |>
 
 ## How complete it is
 
-A column existing does not mean it was filled in. For each diagnosis field
-this computes the share of records with an informative value: not missing,
-and not "Not Reported", "unknown", "Not Applicable" or a similar code.
+A column can exist and still be mostly empty. For each diagnosis field we
+compute the share of records with an informative value: not missing, and
+not "Not Reported", "unknown", "Not Applicable" or a similar code.
 
 ```{r}
 #| label: completeness
@@ -662,13 +679,15 @@ n_half <- sum(dx_complete$informative >= 0.5)
 
 Of the `r n_fields` diagnosis fields, `r n_half` are informative in at least
 half the records. Primary diagnosis, site, age and the main staging fields
-are usable for most participants; the long tail of disease-specific fields
+are usable for most participants. The long tail of disease-specific fields
 (Gleason patterns, neuroblastoma classifications, Breslow thickness) is
-filled only where it applies, and is mostly empty overall. Before an
-analysis that stratifies by a clinical variable, compute its completeness
-in your subset, not in the release as a whole.
+filled only where it applies, so it is mostly empty overall. Before you
+stratify an analysis by a clinical variable, compute its completeness in
+the subset you will analyse rather than in the whole release.
 
 ## Demographics and outcome
+
+Gender, vital status and race, one row per participant with data:
 
 ```{r}
 #| label: demographics
@@ -686,7 +705,7 @@ is known for `r pct(mean(demo_clean$Vital_Status != "Not reported"))` of
 participants with data, but outcome analyses also need follow-up times,
 whose completeness varies by atlas; check it in your subset.
 
-Age at diagnosis is recorded in days since birth. Two features of the
+Age at diagnosis is recorded in days since birth, and two things about the
 values matter before you use them. First, `0` is a placeholder, not an age
 (see the [data model vignette](data-model.html#pitfalls)). Second, ages are
 modified for privacy: the demographics field `Age_Is_Obfuscated` says
@@ -731,8 +750,8 @@ ages |>
 age, with a median of
 `r round(median(ages$age_days[ages$age_days > 0], na.rm = TRUE) / 365.25)`
 years. The spike at 18 includes the CHOP pediatric participants, so HTAN's
-age data cannot separate children from young adults, and every age
-should be read as approximate.
+age data cannot separate children from young adults. Read every age as
+approximate.
 
 # Time: longitudinal sampling
 
@@ -759,10 +778,10 @@ n_multi <- sum(biopsies$timepoints >= 2)
 ```
 
 `r fmt(n_multi)` participants have biopsies or resections on two or more
-different days (the `4` row is four or more), the material for
-before-and-after comparisons. The rest were sampled once, sometimes at
-several sites or as several sections, which supports comparisons across
-space rather than time.
+different days (the `4` row is four or more). They are the material for
+before-and-after comparisons. The rest were sampled on a single day,
+sometimes at several sites or as several sections; that supports comparisons
+across space but not across time.
 
 # Summary
 
