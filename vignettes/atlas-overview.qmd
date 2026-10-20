@@ -93,7 +93,8 @@ modality_of <- function(assay, imaging_type) {
         assay %in% c("Imaging", "SRRSImaging") ~ "Multiplexed imaging",
         grepl("^Bulk|HI-C", assay) ~ "Bulk sequencing",
         assay == "ElectronMicroscopy" ~ "Electron microscopy",
-        assay %in% c("MassSpectrometry", "RPPA") ~ "Proteomics and metabolomics",
+        assay %in% c("MassSpectrometry", "RPPA") ~
+            "Proteomics and metabolomics",
         .default = "Other"
     )
 }
@@ -449,7 +450,9 @@ head(combos, 12)
 #| label: fig-combinations
 #| fig-height: 4.5
 #| fig-width: 8
-#| fig-cap: "Participants by the combination of modalities they were profiled with (12 most common combinations)."
+#| fig-cap: >-
+#|   Participants by the combination of modalities they were profiled with
+#|   (12 most common combinations).
 combos |>
     slice_head(n = 12) |>
     ggplot(aes(n, reorder(combo, n))) +
@@ -515,7 +518,8 @@ downloads.
 ```{r}
 #| label: fig-sizes
 #| fig-height: 4
-#| fig-cap: "Sizes of open Level 3 and 4 files on Synapse, by modality (log scale)."
+#| fig-cap: >-
+#|   Sizes of open Level 3 and 4 files on Synapse, by modality (log scale).
 files |>
     filter(access == "open-synapse", level %in% c(3, 4), File_Size > 0,
         modality %in% c("Single-cell sequencing", "Spatial transcriptomics",
@@ -660,7 +664,9 @@ head(dx_complete, 10)
 ```{r}
 #| label: fig-completeness
 #| fig-height: 6
-#| fig-cap: "Share of diagnosis records with an informative value, for the 30 best-filled fields."
+#| fig-cap: >-
+#|   Share of diagnosis records with an informative value, for the 30
+#|   best-filled fields.
 dx_complete |>
     slice_head(n = 30) |>
     ggplot(aes(informative, reorder(field, informative))) +
@@ -737,7 +743,10 @@ ages |>
 ```{r}
 #| label: fig-age
 #| fig-height: 3.5
-#| fig-cap: "Age at diagnosis of participants with released data (zero values removed). The spike at 18 years holds every participant reported at the privacy floor."
+#| fig-cap: >-
+#|   Age at diagnosis of participants with released data (zero values
+#|   removed). The spike at 18 years holds every participant reported at
+#|   the privacy floor.
 ages |>
     filter(age_days > 0) |>
     ggplot(aes(age_days / 365.25)) +

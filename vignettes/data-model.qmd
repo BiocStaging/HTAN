@@ -104,20 +104,27 @@ Row counts are for Release 7:
 #| label: table-list
 #| echo: false
 desc <- c(
-    clinical_tier1_demographics = "Sex, race, ethnicity, vital status; one row per participant",
-    clinical_tier1_diagnosis = "Primary diagnosis, site, stage, grade; one or more rows per participant",
+    clinical_tier1_demographics =
+        "Sex, race, ethnicity, vital status; one row per participant",
+    clinical_tier1_diagnosis =
+        "Primary diagnosis, site, stage, grade; one or more rows per participant",
     clinical_tier1_therapy = "Treatments, with days from index",
     clinical_tier1_followup = "Follow-up visits, progression, comorbidities",
     clinical_tier1_exposure = "Smoking, alcohol and other exposures",
     clinical_tier1_familyhistory = "Family history of cancer",
-    clinical_tier1_moleculartest = "Clinical molecular tests (e.g. receptor status, mutations)",
+    clinical_tier1_moleculartest =
+        "Clinical molecular tests (e.g. receptor status, mutations)",
     clinical_tier2 = "HTAN disease-agnostic clinical extensions",
     biospecimen = "Every biospecimen and its parent, type, site, preservation",
-    id_provenance = "One row per file-parent-biospecimen link: the lineage table",
+    id_provenance =
+        "One row per file-parent-biospecimen link: the lineage table",
     gc_drs_map = "HTAN file ID to CRDC General Commons DRS URI",
-    imaging_channel_metadata = "Channel (antibody/marker) lists for imaging files",
-    tissueOrOrganOfOrigin_to_wholeOrgan_mapping = "Fine-grained site of origin to whole organ",
-    phase1_longitudinal_data = "Per-participant timeline of biopsies, treatment and vital status",
+    imaging_channel_metadata =
+        "Channel (antibody/marker) lists for imaging files",
+    tissueOrOrganOfOrigin_to_wholeOrgan_mapping =
+        "Fine-grained site of origin to whole organ",
+    phase1_longitudinal_data =
+        "Per-participant timeline of biopsies, treatment and vital status",
     schema = "The Phase 1 data model: attributes, descriptions, valid values"
 )
 htan_tables(con) |>
