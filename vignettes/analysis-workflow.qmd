@@ -130,10 +130,12 @@ candidates |>
 
 One property that matters is not in the metadata: the version of AnnData
 that wrote each file. Files written before AnnData 0.8 (released in 2022)
-use an older on-disk layout that anndataR does not read. Every file
-smaller than `7794_AS_3_unfiltered.h5ad` in this list is in that older
-layout (checked by opening each one), so this vignette uses
-`7794_AS_3`, the smallest file in the current layout:
+use an older on-disk layout that anndataR does not read. `read_htan()`
+reads those with a fallback that keeps the matrices, `obs`, `var` and
+`obsm`, but not `uns`. Every file smaller than
+`7794_AS_3_unfiltered.h5ad` in this list is in that older layout (checked
+by opening each one), so this vignette uses `7794_AS_3`, the smallest file
+in the current layout, which anndataR reads in full:
 
 ```{r}
 #| label: pick
@@ -237,14 +239,15 @@ htan_files(participants = file$HTAN_Participant_ID, con = con) |>
 
 `htan_download()` checks the access tier and total size, asks Synapse for
 a short-lived download URL, fetches the file, and verifies its md5 against
-the metadata. A second call finds the verified copy and does not download
-again.
+the metadata. The file is kept in the package's download cache (a
+BiocFileCache under `tools::R_user_dir("HTAN", "cache")`), so a second
+call finds the verified copy and does not download again. Pass `dest` to
+also copy files to a directory of your choice.
 
 ```{r}
 #| label: download
 #| eval: !expr have_token
-dest <- file.path(tempdir(), "htan-data")
-dl <- htan_download(file, dest = dest, con = con)
+dl <- htan_download(file, con = con)
 dl
 ```
 
@@ -321,7 +324,7 @@ downloaded and joined by barcode. This chunk does that only when needed:
 if (!is(spe, "SpatialExperiment")) {
     pos_id <- lineage$related_file_id[
         grepl("tissue_positions", lineage$Filename)]
-    pos_dl <- htan_download(pos_id, dest = dest, con = con)
+    pos_dl <- htan_download(pos_id, con = con)
     ## Space Ranger 2.0 writes a header row; 1.x did not.
     has_header <- startsWith(readLines(pos_dl$path, n = 1), "barcode")
     pos <- read.csv(pos_dl$path, header = has_header)
